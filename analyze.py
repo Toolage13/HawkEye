@@ -1,7 +1,6 @@
 import asyncio
 from aiohttp import ClientSession
 import config
-from eveDB import eveDB
 import json
 import logging
 import os
@@ -312,7 +311,3 @@ def get_top_three(d):
         return sorted_categories[:3]
     except:
         return ['', '', '']
-
-
-if __name__ == '__main__':
-    print(main(['Kain Tarr', 'Bryan Tarr'], db=eveDB()))
