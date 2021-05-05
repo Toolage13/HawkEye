@@ -5,3 +5,5 @@ pyinstaller==4.3
 pyinstaller-hooks-contrib==2021.1
 pyperclip==1.8.2
 wxPython==4.1.1
+aiohttp==3.7.4.post0
+requests==2.25.1
