@@ -82,7 +82,7 @@ MAX_NAMES = 500  # The max number of char names to be processed
 MAX_KM = 50  # Max number of killmails to process per character
 ZKILL_MULTIPLIER = 1.5
 ZKILL_RETRY = 50
-MAX_CHUNK = 90
+MAX_CHUNK = 50
 GUI_TITLE = "HawkEye " + CURRENT_VER
 
 # Colour Scheme
