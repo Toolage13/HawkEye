@@ -97,7 +97,9 @@ DARK_MODE = {
     "LBL": wx.Colour(160, 160, 160),
     "HL1": wx.Colour(62, 157, 250),  # Blue
     "HL2": wx.Colour(237, 72, 59),  # Red
-    "HL3": wx.Colour(237, 47, 218)  # Pink
+    "HL3": wx.Colour(237, 47, 218),  # Pink
+    "HL4": wx.Colour(255, 255, 0),  # Bright yellow
+    "HL5": wx.Colour(179, 240, 255)  # Light blue
     }
 
 NORMAL_MODE = {
@@ -107,7 +109,9 @@ NORMAL_MODE = {
     "LBL": wx.Colour(32, 32, 32),
     "HL1": wx.Colour(187, 55, 46),
     "HL2": wx.Colour(38, 104, 166),
-    "HL3": wx.Colour(237, 47, 218)
+    "HL3": wx.Colour(237, 47, 218),
+    "HL4": wx.Colour(0, 153, 51),  # Green,
+    "HL5": wx.Colour(0, 0, 153)  # Dark blue
     }
 
 # Logging setup

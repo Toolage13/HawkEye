@@ -82,6 +82,8 @@ async def get_kill_data(pilot_name, db):
         'autz': {'kills': 0.01, 'attackers': 0},
         'average_kill_value': 0,
         'average_pilots': 0,
+        'avg_10': 0,
+        'avg_gang': 0,
         'blops_use': 0,
         'boy_scout': 0,
         'buttbuddies': {},
@@ -101,9 +103,15 @@ async def get_kill_data(pilot_name, db):
         'name': pilot_name['char_name'],
         'nanofag': 0,
         'playstyle': 'None',
+        'pro_10': 0,
+        'pro_gang': 0,
         'processed_killmails': 0,
         'roleplaying_dock_workers': 0,
+        'super': 0,
         'timezone': 'N/A',
+        'titan': 0,
+        'top_10_ships': {},
+        'top_gang_ships': {},
         'top_regions': {},
         'top_ships': {},
         'trash_can_resident': 0,
@@ -164,6 +172,12 @@ async def get_kill_data(pilot_name, db):
         stats['processed_killmails'] += 1
         add_to_dict(stats['top_regions'], db.get_region(killmail['solar_system_id']))
         stats['average_pilots'] += len(killmail['attackers'])
+        if len(killmail['attackers']) > 9:
+            stats['avg_10'] += len(killmail['attackers'])
+            stats['pro_10'] += 1
+        else:
+            stats['avg_gang'] += len(killmail['attackers'])
+            stats['pro_gang'] += 1
         stats['average_kill_value'] += float(killmail['zkb']['totalValue'])
         stats[db.get_location(killmail['solar_system_id'])] += 1
         stats[get_timezone(killmail['killmail_time'])]['kills'] += 1
@@ -173,6 +187,10 @@ async def get_kill_data(pilot_name, db):
             attacker_id = attacker.get('character_id')
             if attacker_id == pilot_id:
                 add_to_dict(stats['top_ships'], attacker.get('ship_type_id'))
+                if len(killmail['attackers']) > 9:
+                    add_to_dict(stats['top_10_ships'], attacker.get('ship_type_id'))
+                else:
+                    add_to_dict(stats['top_gang_ships'], attacker.get('ship_type_id'))
             else:
                 add_to_dict(stats['buttbuddies'], attacker_id)
         if db.used_cyno(killmail['attackers'], pilot_id):
@@ -183,32 +201,45 @@ async def get_kill_data(pilot_name, db):
             stats['blops_use'] += 1
         if db.used_smartbomb(killmail['attackers'], pilot_id):
             stats['roleplaying_dock_workers'] += 1
+        if db.used_super(killmail['attackers'], pilot_id):
+            stats['super'] += 1
+        if db.used_titan(killmail['attackers'], pilot_id):
+            stats['titan'] += 1
 
-    stats['average_kill_value'] = stats['average_kill_value'] / (len(details) + 0.01)
-    stats['average_pilots'] = round(stats['average_pilots'] / (len(details) + 0.01))
-    for tz in ['autz', 'eutz', 'ustz']:
-        stats[tz]['attackers'] = round(stats[tz]['attackers'] / stats[tz]['kills'])
-    stats['timezone'] = 'AUTZ: {}% ({}) | EUTZ: {}% ({}) | USTZ: {}% ({})'.format(
-        round(stats['autz']['kills'] / (stats['processed_killmails'] + 0.01) * 100), stats['autz']['attackers'],
-        round(stats['eutz']['kills'] / (stats['processed_killmails'] + 0.01) * 100), stats['eutz']['attackers'],
-        round(stats['ustz']['kills'] / (stats['processed_killmails'] + 0.01) * 100), stats['ustz']['attackers'])
-
-    #start_time = time.time()
-    #Logger.info('Got buddies in {} seconds.'.format(round(time.time() - start_time, 2)))
-
+    stats['average_kill_value'] = stats['average_kill_value'] / (stats['processed_killmails'] + 0.01)
+    stats['average_pilots'] = round(stats['average_pilots'] / (stats['processed_killmails'] + 0.01))
+    stats['avg_10'] = round(stats['avg_10'] / (stats['pro_10'] + 0.01))
+    stats['avg_gang'] = round(stats['avg_gang'] / (stats['pro_gang'] + 0.01))
+    timezone = 'autz'
+    for tz in ['eutz', 'ustz']:
+        if stats[tz]['kills'] > stats[timezone]['kills']:
+            timezone = tz
+    stats['timezone'] = '{}: {}% ({})'.format(timezone.upper(),
+                                              round(stats[timezone]['kills'] / (stats['processed_killmails'] + 0.01) * 100),
+                                              stats['average_pilots']
+                                              )
     stats['top_regions'] = ', '.join(get_top_three(stats['top_regions']))
     stats['top_ships'] = ', '.join(db.get_ship_name(i) for i in get_top_three(stats['top_ships']))
+    stats['top_10_ships'] = ', '.join(db.get_ship_name(i) for i in get_top_three(stats['top_10_ships']))
+    stats['top_gang_ships'] = ', '.join(db.get_ship_name(i) for i in get_top_three(stats['top_gang_ships']))
     stats['cyno'] = stats['cyno'] / (stats['processed_killmails'] + 0.01)
-    stats['capital_use'] = '{}'.format(round(stats['capital_use'] / (stats['processed_killmails'] + 0.01) * 100))
+    stats['capital_use'] = stats['capital_use'] / (stats['processed_killmails'] + 0.01)
     stats['blops_use'] = stats['blops_use'] / (stats['processed_killmails'] + 0.01)
     if stats['blops_use'] > config.BLOPS_HL_PERCENTAGE:
-        stats['warning'] += "BLOPS"
+        stats['warning'] = add_string(stats['warning'], 'BLOPS')
     if stats['cyno'] > config.CYNO_HL_PERCENTAGE:
-        if stats['warning'] == '':
-            stats['warning'] = 'CYNO'
-        else:
-            stats['warning'] += " + CYNO"
+        stats['warning'] = add_string(stats['warning'], 'CYNO')
+    if stats['super'] > 0:
+        stats['warning'] = add_string(stats['warning'], 'SUPER')
+    if stats['titan'] > 0:
+        stats['warning'] = add_string(stats['warning'], 'TITAN')
     return stats
+
+
+def add_string(o, n):
+    if o == '':
+        return n
+    return '{} + {}'.format(o, n)
 
 
 async def process(data):

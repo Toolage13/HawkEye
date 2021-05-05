@@ -37,6 +37,8 @@ class eveDB:
         self.rookie_ships = None
         self.seals = None
         self.smartbomb_ids = None
+        self.super = None
+        self.titan = None
         self.load_tables()
         Logger.info('eveDB object created...')
 
@@ -234,6 +236,12 @@ class eveDB:
         self.cursor.execute("select typeID from invTypes where groupID = 1308")
         self.higgs = [row[0] for row in self.cursor.fetchall()]
 
+        self.cursor.execute("select typeID from invTypes where groupID = 659")
+        self.super = [row[0] for row in self.cursor.fetchall()]
+
+        self.cursor.execute("select typeID from invTypes where groupID = 30")
+        self.titan = [row[0] for row in self.cursor.fetchall()]
+
         return None
 
     def prepare_local_db(self):
@@ -253,6 +261,30 @@ class eveDB:
     def get_region(self, region_id):
         return self.map_regions[self.map_solar_systems[region_id]['regionID']]
 
+    def used_super(self, a, p):
+        """
+        :param a: Dictionary of attackers
+        :param p: pilot id
+        :return: Boolean
+        """
+
+        for d in a:
+            if d.get('character_id') == p and self.is_super(d.get('ship_type_id')):
+                return True
+        return False
+
+    def used_titan(self, a, p):
+        """
+        :param a: Dictionary of attackers
+        :param p: pilot id
+        :return: Boolean
+        """
+
+        for d in a:
+            if d.get('character_id') == p and self.is_titan(d.get('ship_type_id')):
+                return True
+        return False
+
     def used_cyno(self, a, p):
         """
         :param a: Dictionary of attackers
@@ -263,6 +295,26 @@ class eveDB:
         for d in a:
             if d.get('character_id') == p and self.is_recon(d.get('ship_type_id')):
                 return True
+        return False
+
+    def is_super(self, id):
+        """
+        :param id: ship_type_id
+        :return: Boolean
+        """
+
+        if id in self.super:
+            return True
+        return False
+
+    def is_titan(self, id):
+        """
+        :param id: ship_type_id
+        :return: Boolean
+        """
+
+        if id in self.titan:
+            return True
         return False
 
     def is_recon(self, id):

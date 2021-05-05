@@ -20,7 +20,7 @@ def showAboutBox(parent, event=None):
     info = wx.adv.AboutDialogInfo()
 
     info.SetName("HawkEye")
-    info.SetVersion(config.CURRENT_VER)
+    # info.SetVersion(config.CURRENT_VER)
     info.SetDescription(description)
     info.SetCopyright('(C) 2021 Kain Tarr')
     info.SetWebSite('https://github.com/Eve-PySpy/PySpy')

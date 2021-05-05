@@ -38,13 +38,18 @@ class Frame(wx.Frame):
             [3, "Corporation", wx.ALIGN_LEFT, 80, True, True, "Corporation", 'corp_name'],
             [4, "Alliance", wx.ALIGN_LEFT, 80, True, True, "Alliance", 'alliance_name'],
             [5, "Cyno", wx.ALIGN_LEFT, 80, True, True, "Cyno", 'cyno'],
-            [6, "Avg. Attackers", wx.ALIGN_LEFT, 80, True, True, "Average Attackers", 'average_pilots'],
-            [7, "Timezone", wx.ALIGN_LEFT, 80, True, True, "Timezone", "timezone"],
-            [8, "Top Ships", wx.ALIGN_LEFT, 80, True, True, "Top Ships", 'top_ships'],
-            [9, "Capital Use", wx.ALIGN_LEFT, 80, True, True, "Capital Use", 'capital_use'],
-            [10, "Blops Use", wx.ALIGN_LEFT, 80, True, True, "Blops Use", 'blops_use'],
-            [11, "Top Regions", wx.ALIGN_LEFT, 80, True, True, "Top Regions", 'top_regions'],
-            [12, "", None, 1, False, True, "", 1]  # Need for _stretchLastCol()
+            [6, "Avg. Gang", wx.ALIGN_LEFT, 80, True, True, "Average Gang", 'average_pilots'],
+            [7, "Avg. Fleet", wx.ALIGN_LEFT, 80, True, True, "Average Fleet Size", 'avg_10'],
+            [8, "Timezone", wx.ALIGN_LEFT, 80, True, True, "Timezone", "timezone"],
+            [9, "Top Ships", wx.ALIGN_LEFT, 80, True, True, "Top Ships", 'top_ships'],
+            [10, "Top Gang Ships", wx.ALIGN_LEFT, 80, True, True, "Top Gang Ships", 'top_gang_ships'],
+            [11, "Top Fleet Ships", wx.ALIGN_LEFT, 80, True, True, "Top Fleet Ships", 'top_10_ships'],
+            [12, "Super", wx.ALIGN_LEFT, 40, True, True, "Super Kills", 'super'],
+            [13, "Titan", wx.ALIGN_LEFT, 40, True, True, "Titan Kills", 'titan'],
+            [14, "Capital Use", wx.ALIGN_LEFT, 80, True, True, "Capital Use", 'capital_use'],
+            [15, "Blops Use", wx.ALIGN_LEFT, 80, True, True, "Blops Use", 'blops_use'],
+            [16, "Top Regions", wx.ALIGN_LEFT, 80, True, True, "Top Regions", 'top_regions'],
+            [17, "", None, 1, False, True, "", 1]  # Need for _stretchLastCol()
             )
 
         # Define the menu bar and menu items
@@ -74,7 +79,7 @@ class Frame(wx.Frame):
         self.hl_sub = wx.Menu()
         self.view_menu.Append(wx.ID_ANY, "Highlighting", self.hl_sub)
 
-        self.hl_blops = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&BLOPS Kills\t(red)")
+        self.hl_blops = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&Blops Kills\t(red)")
         self.hl_sub.Bind(wx.EVT_MENU, self._toggleHighlighting, self.hl_blops)
         self.hl_blops.Check(self.options.Get("HlBlops", True))
 
@@ -82,9 +87,17 @@ class Frame(wx.Frame):
         self.hl_sub.Bind(wx.EVT_MENU, self._toggleHighlighting, self.hl_hic)
         self.hl_hic.Check(self.options.Get("HlHic", True))
 
-        self.hl_cyno = self.hl_sub.AppendCheckItem(wx.ID_ANY, "Cyno Characters (>" + "{:.0%}".format(config.CYNO_HL_PERCENTAGE) + " cyno losses)\t(blue)")
+        self.hl_cyno = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&Cyno Characters\t(blue)")
         self.hl_sub.Bind(wx.EVT_MENU, self._toggleHighlighting, self.hl_cyno)
         self.hl_cyno.Check(self.options.Get("HlCyno", True))
+
+        self.hl_super = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&Super Kills\t(green)")
+        self.hl_sub.Bind(wx.EVT_MENU, self._toggleHighlighting, self.hl_super)
+        self.hl_super.Check(self.options.Get("HlSuper", True))
+
+        self.hl_titan = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&Titan Kills\t(blue)")
+        self.hl_sub.Bind(wx.EVT_MENU, self._toggleHighlighting, self.hl_titan)
+        self.hl_titan.Check(self.options.Get("HlTitan", True))
 
         self.hl_list = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&Highlighted Entities List\t(pink)")
         self.hl_sub.Bind(wx.EVT_MENU, self._toggleHighlighting, self.hl_list)
@@ -129,6 +142,7 @@ class Frame(wx.Frame):
         self.grid = wx.grid.Grid(self, wx.ID_ANY)
         self.grid.CreateGrid(0, 0)
         self.grid.SetName("Output List")
+        self.grid.ShowScrollbars(wx.SHOW_SB_NEVER, wx.SHOW_SB_NEVER)
 
         # The status label shows various info and error messages.
         self.status_label = wx.StaticText(
@@ -187,6 +201,8 @@ class Frame(wx.Frame):
             self.hl1_colour = self.normal_dict["HL1"]
             self.hl2_colour = self.normal_dict["HL2"]
             self.hl3_colour = self.normal_dict["HL3"]
+            self.hl4_colour = self.normal_dict["HL4"]
+            self.hl5_colour = self.normal_dict["HL5"]
         else:
             self.bg_colour = self.dark_dict["BG"]
             self.txt_colour = self.dark_dict["TXT"]
@@ -195,6 +211,8 @@ class Frame(wx.Frame):
             self.hl1_colour = self.dark_dict["HL1"]
             self.hl2_colour = self.dark_dict["HL2"]
             self.hl3_colour = self.dark_dict["HL3"]
+            self.hl4_colour = self.dark_dict["HL4"]
+            self.hl5_colour = self.dark_dict["HL5"]
 
         # Set default colors
         self.SetBackgroundColour(self.bg_colour)
@@ -390,10 +408,15 @@ class Frame(wx.Frame):
                 r['corp_name'],
                 r['alliance_name'],
                 '{:.0%}'.format(r['cyno']),
-                r['average_pilots'],
+                '{} ({:.0%})'.format(r['avg_gang'], r['pro_gang'] / r['processed_killmails']),
+                '{} ({:.0%})'.format(r['avg_10'], r['pro_10'] / r['processed_killmails']),
                 r['timezone'],
                 r['top_ships'],
-                r['capital_use'],
+                r['top_gang_ships'],
+                r['top_10_ships'],
+                r['super'],
+                r['titan'],
+                '{:.0%}'.format(r['capital_use']),
                 '{:.0%}'.format(r['blops_use']),
                 r['top_regions']
                 ]
@@ -415,6 +438,14 @@ class Frame(wx.Frame):
                     if self.options.Get("HlList", True) and (entry[0] == r['id'] or entry[0] == r['corp_id'] or entry[0] == r['alliance_id']):
                         self.grid.SetCellTextColour(rowidx, colidx, self.hl3_colour)
                         color = True
+
+                if self.options.Get("HlSuper", True) and r['super'] > 0:
+                    self.grid.SetCellTextColour(rowidx, colidx, self.hl4_colour)
+                    color = True
+
+                if self.options.Get("HlTitan", True) and r['titan'] > 0:
+                    self.grid.SetCellTextColour(rowidx, colidx, self.hl5_colour)
+                    color = True
 
                 if not color:
                     self.grid.SetCellTextColour(rowidx, colidx, self.txt_colour)
@@ -621,6 +652,8 @@ class Frame(wx.Frame):
         self.options.Set("HlCyno", self.hl_cyno.IsChecked())
         self.options.Set("HlHic", self.hl_hic.IsChecked())
         self.options.Set("HlList", self.hl_list.IsChecked())
+        self.options.Set("HlSuper", self.hl_super.IsChecked())
+        self.options.Set("HlTitan", self.hl_titan.IsChecked())
         self.updateList(self.options.Get("outlist", None))
 
     def _toggleStayOnTop(self, evt=None):
