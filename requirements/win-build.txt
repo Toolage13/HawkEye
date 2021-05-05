@@ -1,0 +1,2 @@
+-r common.txt
+py2exe==0.10.4.0
