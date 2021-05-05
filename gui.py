@@ -1,8 +1,6 @@
 import aboutdialog
 import config
 import eveDB
-import highlightdialog
-import ignoredialog
 import logging
 import os
 import sortarray
@@ -102,19 +100,11 @@ class Frame(wx.Frame):
         # Options Menubar
         self.opt_menu = wx.Menu()
 
-        self.review_ignore = self.opt_menu.Append(wx.ID_ANY, "&Review Ignored Entities\tCTRL+R")
-        self.opt_menu.Bind(
-            wx.EVT_MENU,
-            self._openIgnoreDialog,
-            self.review_ignore
-        )
+        self.review_ignore = self.opt_menu.Append(wx.ID_ANY, "&Clear Ignored Entities\tCTRL+R")
+        self.opt_menu.Bind(wx.EVT_MENU, self._clearIgnoredEntities, self.review_ignore)
 
-        self.review_highlight = self.opt_menu.Append(wx.ID_ANY, "&Review Highlighted Entities\tCTRL+H")
-        self.opt_menu.Bind(
-            wx.EVT_MENU,
-            self._openHightlightDialog,
-            self.review_highlight
-        )
+        self.review_highlight = self.opt_menu.Append(wx.ID_ANY, "&Clear Highlighted Entities\tCTRL+H")
+        self.opt_menu.Bind(wx.EVT_MENU, self._clearHighlightedEntities, self.review_highlight)
 
         self.opt_menu.AppendSeparator()
 
@@ -359,7 +349,7 @@ class Frame(wx.Frame):
         else:
             return org + " + " + app
 
-    def updateList(self, outlist, duration=None):
+    def updateList(self, outlist, duration=None, filtered=None):
         '''
         `updateList()` takes the output of `output_list()` in `analyze.py` (via
         `sortOutlist()`) or a copy thereof stored in self.option, and uses it
@@ -431,8 +421,8 @@ class Frame(wx.Frame):
                 colidx += 1
             rowidx += 1
 
-        Logger.info(str(len(outlist)) + " characters analysed, in " + str(duration) + " seconds.")
-        statusmsg.push_status(str(len(outlist)) + " characters analysed, in " + str(duration) + " seconds. Double click character to go to zKillboard.")
+        Logger.info(str(len(outlist)) + " characters analysed, in " + str(duration) + " seconds (" + str(filtered) + " filtered).")
+        statusmsg.push_status(str(len(outlist)) + " characters analysed, in " + str(duration) + " seconds (" + str(filtered) + " filtered). Double click character to go to zKillboard.")
 
     def updateStatusbar(self, msg):
         '''Gets called by push_status() in statusmsg.py.'''
@@ -579,7 +569,7 @@ class Frame(wx.Frame):
             self.PopupMenu(self.menu, event.GetPosition())
             self.menu.Destroy()
 
-    def sortOutlist(self, event=None, outlist=None, duration=None):
+    def sortOutlist(self, event=None, outlist=None, duration=None, filtered=None):
         """
         If called by event handle, i.e. user
         """
@@ -624,7 +614,7 @@ class Frame(wx.Frame):
                 case_sensitive=False
                 )
         self.options.Set("outlist", outlist)
-        self.updateList(outlist, duration=duration)
+        self.updateList(outlist, duration=duration, filtered=filtered)
 
     def _toggleHighlighting(self, e):
         self.options.Set("HlBlops", self.hl_blops.IsChecked())
@@ -656,27 +646,15 @@ class Frame(wx.Frame):
                 return
         aboutdialog.showAboutBox(self)
 
-    def _openIgnoreDialog(self, evt=None):
-        '''
-        Checks if IgnoreDialog is already open. If not, opens the dialog
-        window, otherwise brings the existing dialog window to the front.
-        '''
-        for c in self.GetChildren():
-            if c.GetName() == "IgnoreDialog":  # Needs to match name in ignoredialog.py
-                c.Raise()
-                return
-        ignoredialog.showIgnoreDialog(self)
+    def _clearIgnoredEntities(self, evt=None):
+        self.options.Set("ignoredList", [])
+        self.updateList(self.options.Get("outlist", None))
+        statusmsg.push_status("Cleared ignored entities")
 
-    def _openHightlightDialog(self, evt=None):
-        '''
-        Checks if HightlightDialog is already open. If not, opens the dialog
-        window, otherwise brings the existing dialog window to the front.
-        '''
-        for c in self.GetChildren():
-            if c.GetName() == "HighlightDialog":  # Needs to match name in highlightdialog.py
-                c.Raise()
-                return
-        highlightdialog.showHighlightDialog(self)
+    def _clearHighlightedEntities(self, evt=None):
+        self.options.Set("highlightedList", [])
+        self.updateList(self.options.Get("outlist", None))
+        statusmsg.push_status("Cleared highlighted entities")
 
     def _openHightlightDialog(self, evt=None):
         '''

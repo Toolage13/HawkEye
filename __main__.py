@@ -44,7 +44,7 @@ def analyze_chars(char_names, db):
     start_time = time.time()
     wx.CallAfter(app.PySpy.grid.ClearGrid)
     try:
-        outlist = analyze.main(char_names, db)
+        (outlist, filtered) = analyze.main(char_names, db)
         duration = round(time.time() - start_time, 1)
         if outlist is not None:
             # Need to use keyword args as sortOutlist can also get called
@@ -52,7 +52,8 @@ def analyze_chars(char_names, db):
             wx.CallAfter(
                 app.PySpy.sortOutlist,
                 outlist=outlist,
-                duration=duration
+                duration=duration,
+                filtered=filtered
                 )
         else:
             statusmsg.push_status("No valid character names found. Please try again...")

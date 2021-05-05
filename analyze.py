@@ -15,13 +15,29 @@ if not os.path.exists(os.path.join(config.PREF_PATH, 'kills/')):
 
 
 def main(pilot_names, db):
+    ignore_list = config.OPTIONS_OBJECT.Get("ignoredList")
+    Logger.info('Removing pilots {} from list to retrieve.'.format([p for p in pilot_names if p in [i[1] for i in ignore_list]]))
+    new_pilot_names = [p for p in pilot_names if p not in [i[1] for i in ignore_list]]
     statusmsg.push_status("Retrieving pilot IDs from pilot names...")
     loop = asyncio.new_event_loop()
-    loop.run_until_complete(resolve_pilot_ids(pilot_names, db))
+    loop.run_until_complete(resolve_pilot_ids(new_pilot_names, db))
     loop.close()
+    pilot_ids = db.query_characters(new_pilot_names)
+    transform_ignore = {i[0]: i[1] for i in ignore_list}
+    for p in pilot_ids:
+        if p['corp_id'] in transform_ignore.keys():
+            Logger.info('Removing pilot {} from list to retrieve ({}).'.format(p['char_name'], transform_ignore[p['corp_id']]))
+    pilot_ids = [p for p in pilot_ids if p['corp_id'] not in transform_ignore.keys()]
+    for p in pilot_ids:
+        if p['alliance_id'] in transform_ignore.keys():
+            Logger.info(
+                'Removing pilot {} from list to retrieve ({}).'.format(p['char_name'], transform_ignore[p['alliance_id']]))
+    pilot_ids = [p for p in pilot_ids if p['alliance_id'] not in transform_ignore.keys()]
+    if len(pilot_ids) == 0:
+        Logger.info('Filtered out all pilots provided...')
+        return None
     statusmsg.push_status("Updating pilot corporations and alliances...")
-    pilot_ids = db.query_characters(pilot_names)
-    affiliations = db.get_char_affiliations(pilot_ids)
+    affiliations = db.get_char_affiliations([p['char_id'] for p in pilot_ids])
     affil_ids = []
     for a in affiliations:
         affil_ids.append(a.get('alliance_id'))
@@ -29,8 +45,8 @@ def main(pilot_names, db):
     statusmsg.push_status("Updating corporation and alliance names from corporation and alliance IDs...")
     db.get_affil_names(affil_ids)
     character_stats = []
-    for chunk in divide_chunks(pilot_names, config.MAX_CHUNK):
-        statusmsg.push_status("Retrieving killboard data for {}...".format(', '.join(chunk)))
+    for chunk in divide_chunks(pilot_ids, config.MAX_CHUNK):
+        statusmsg.push_status("Retrieving killboard data for {}...".format(', '.join([c['char_name'] for c in chunk])))
         Logger.info('Running chunk {}'.format(chunk))
         start_time = time.time()
         loop = asyncio.new_event_loop()
@@ -39,7 +55,7 @@ def main(pilot_names, db):
         for c in details:
             character_stats.append(c)
         Logger.info('Ran chunk in {} seconds.'.format(time.time() - start_time))
-    return character_stats
+    return (character_stats, len(pilot_names) - len(pilot_ids))
 
 
 def divide_chunks(l, n):
@@ -58,10 +74,10 @@ async def concurrent_run_character(pilot_names, db):
 
 
 async def get_kill_data(pilot_name, db):
-    Logger.info('Getting kill data for {}.'.format(pilot_name))
-    pilot_id = await db.get_pilot_id(pilot_name)
+    Logger.info('Getting kill data for {}.'.format(pilot_name['char_name']))
+    pilot_id = await db.get_pilot_id(pilot_name['char_name'])
     stats = {
-        'alliance_id': 0,
+        'alliance_id': pilot_name['alliance_id'],
         'alliance_name': 'None',
         'autz': {'kills': 0.01, 'attackers': 0},
         'average_kill_value': 0,
@@ -71,7 +87,7 @@ async def get_kill_data(pilot_name, db):
         'buttbuddies': {},
         'capital_use': 0,
         'coastal_city_elite': 0,
-        'corp_id': 0,
+        'corp_id': pilot_name['corp_id'],
         'corp_name': '',
         'countryside_hillbilly': 0,
         'cyno': 0,
@@ -82,7 +98,7 @@ async def get_kill_data(pilot_name, db):
         'hotdrop': 0,
         'id': pilot_id,
         'involved_pilots': [],
-        'name': pilot_name,
+        'name': pilot_name['char_name'],
         'nanofag': 0,
         'playstyle': 'None',
         'processed_killmails': 0,

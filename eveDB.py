@@ -514,8 +514,8 @@ class eveDB:
             return 'N/A'
 
     def query_characters(self, char_names):
-        self.local_c.execute("""select char_id from characters where char_name in ({})""".format(','.join(['?'] * len(char_names))), char_names)
-        return [r[0] for r in self.local_c.fetchall()]
+        self.local_c.execute("""select char_id, char_name, corp_id, alliance_id from characters where char_name in ({})""".format(','.join(['?'] * len(char_names))), char_names)
+        return [{'char_id': r[0], 'char_name': r[1], 'corp_id': r[2], 'alliance_id': r[3]} for r in self.local_c.fetchall()]
 
 
 def clear_characters():
