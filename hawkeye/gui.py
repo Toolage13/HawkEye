@@ -8,7 +8,6 @@ import webbrowser
 import wx
 import wx.grid as WXG
 import wx.lib.agw.persist as pm
-from . import app
 
 Logger = logging.getLogger(__name__)
 
@@ -372,8 +371,8 @@ class Frame(wx.Frame):
                 colidx += 1
             rowidx += 1
 
-        statusmsg.push_status(str(len(outlist)) + " characters analysed, in " + str(duration) + " seconds. Double click " + "character to go to zKillboard.", app)
         Logger.info(str(len(outlist)) + " characters analysed, in " + str(duration) + " seconds.")
+        statusmsg.push_status(str(len(outlist)) + " characters analysed, in " + str(duration) + " seconds. Double click character to go to zKillboard.", app)
 
 
     def updateStatusbar(self, msg):
