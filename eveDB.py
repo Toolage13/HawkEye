@@ -518,6 +518,17 @@ class eveDB:
         return [r[0] for r in self.local_c.fetchall()]
 
 
+def clear_characters():
+    db = sqlite3.connect(os.path.join(config.PREF_PATH, 'characters.db'),
+                         check_same_thread=False,
+                         detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
+                         )
+    c = db.cursor()
+    c.execute("""delete from characters""")
+    db.commit()
+    db.close()
+
+
 def post_req_ccp(esi_path, json_data):
     url = "https://esi.evetech.net/latest/" + esi_path + "?datasource=tranquility"
     try:

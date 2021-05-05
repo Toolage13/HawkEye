@@ -13,9 +13,9 @@ Logger = logging.getLogger(__name__)
 
 
 def watch_clpbd():
+    db = eveDB()
     valid = False
     recent_value = None
-    db = eveDB()
     while True:
         clipboard = pyperclip.paste()
         if clipboard != recent_value:
@@ -61,6 +61,7 @@ def analyze_chars(char_names, db):
             "Failed to collect character information. Clipboard "
             "content was: " + str(char_names), exc_info=True
         )
+
 
 app = gui.App(0)
 background_thread = threading.Thread(target=watch_clpbd, daemon=True)

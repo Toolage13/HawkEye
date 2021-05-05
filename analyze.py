@@ -97,12 +97,6 @@ async def get_kill_data(pilot_name, db):
     }
 
     if not pilot_id:
-        stats['average_pilots'] = 'N/A'
-        stats['blops_use'] = 'N/A'
-        stats['capital_use'] = 'N/A'
-        stats['cyno'] = 'N/A'
-        stats['top_regions'] = 'N/A'
-        stats['top_ships'] = 'N/A'
         return stats
 
     affil_ids = db.get_char_affiliations([pilot_id])
@@ -132,12 +126,6 @@ async def get_kill_data(pilot_name, db):
                     text = await resp.text()
                     if text == "[]":
                         Logger.info('Returning empty killboard for {}'.format(pilot_name))
-                        stats['average_pilots'] = 'N/A'
-                        stats['blops_use'] = 'N/A'
-                        stats['capital_use'] = 'N/A'
-                        stats['cyno'] = 'N/A'
-                        stats['top_regions'] = 'N/A'
-                        stats['top_ships'] = 'N/A'
                         return stats
                     data = await resp.json()
                 break
@@ -147,13 +135,7 @@ async def get_kill_data(pilot_name, db):
                 await asyncio.sleep(random.random() * config.ZKILL_MULTIPLIER)
 
     if not data:
-        stats['average_pilots'] = 'N/A'
-        stats['blops_use'] = 'N/A'
-        stats['capital_use'] = 'N/A'
-        stats['cyno'] = 'N/A'
         stats['name'] = 'ZKILL RATE LIMITED (429)'
-        stats['top_regions'] = 'N/A'
-        stats['top_ships'] = 'N/A'
         return stats
 
     Logger.info('Requested {} and got it in {} seconds'.format(url, round(time.time() - start_time, 3)))
@@ -200,19 +182,16 @@ async def get_kill_data(pilot_name, db):
 
     stats['top_regions'] = ', '.join(get_top_three(stats['top_regions']))
     stats['top_ships'] = ', '.join(db.get_ship_name(i) for i in get_top_three(stats['top_ships']))
-    stats['cyno'] = '{}'.format(round(stats['cyno'] / (stats['processed_killmails'] + 0.01) * 100))
+    stats['cyno'] = stats['cyno'] / (stats['processed_killmails'] + 0.01)
     stats['capital_use'] = '{}'.format(round(stats['capital_use'] / (stats['processed_killmails'] + 0.01) * 100))
-    stats['blops_use'] = '{}'.format(round(stats['blops_use'] / (stats['processed_killmails'] + 0.01) * 100))
-    if float(stats['blops_use']) > 1:
+    stats['blops_use'] = stats['blops_use'] / (stats['processed_killmails'] + 0.01)
+    if stats['blops_use'] > config.BLOPS_HL_PERCENTAGE:
         stats['warning'] += "BLOPS"
-    if float(stats['cyno']) > 1:
+    if stats['cyno'] > config.CYNO_HL_PERCENTAGE:
         if stats['warning'] == '':
             stats['warning'] = 'CYNO'
         else:
             stats['warning'] += " + CYNO"
-    stats['blops_use'] += '%'
-    stats['cyno'] += '%'
-    stats['capital_use'] += '%'
     return stats
 
 

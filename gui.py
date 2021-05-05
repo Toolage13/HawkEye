@@ -1,5 +1,8 @@
 import aboutdialog
 import config
+import eveDB
+import highlightdialog
+import ignoredialog
 import logging
 import os
 import sortarray
@@ -31,7 +34,7 @@ class Frame(wx.Frame):
         # Set parameters for columns
         self.columns = (
             # Index, Heading, Format, Default Width, Can Toggle, Default Show, Menu Name, Outlist Column
-            [0, "ID", wx.ALIGN_LEFT, 0, False, False, "", 0],
+            [0, "ID", wx.ALIGN_LEFT, 0, False, False, "", 'id'],
             [1, "Warning", wx.ALIGN_LEFT, 80, True, True, "Warning", 'warning'],
             [2, "Character", wx.ALIGN_LEFT, 80, False, True, "Character", 'name'],
             [3, "Corporation", wx.ALIGN_LEFT, 80, True, True, "Corporation", 'corp_name'],
@@ -41,7 +44,7 @@ class Frame(wx.Frame):
             [7, "Timezone", wx.ALIGN_LEFT, 80, True, True, "Timezone", "timezone"],
             [8, "Top Ships", wx.ALIGN_LEFT, 80, True, True, "Top Ships", 'top_ships'],
             [9, "Capital Use", wx.ALIGN_LEFT, 80, True, True, "Capital Use", 'capital_use'],
-            [10, "Blops Use", wx.ALIGN_LEFT, 80, True, True, "Capital Use", 'blops_use'],
+            [10, "Blops Use", wx.ALIGN_LEFT, 80, True, True, "Blops Use", 'blops_use'],
             [11, "Top Regions", wx.ALIGN_LEFT, 80, True, True, "Top Regions", 'top_regions'],
             [12, "", None, 1, False, True, "", 1]  # Need for _stretchLastCol()
             )
@@ -69,12 +72,58 @@ class Frame(wx.Frame):
 
         self.view_menu.AppendSeparator()
 
+        # Higlighting submenu for view menu
+        self.hl_sub = wx.Menu()
+        self.view_menu.Append(wx.ID_ANY, "Highlighting", self.hl_sub)
+
+        self.hl_blops = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&BLOPS Kills\t(red)")
+        self.hl_sub.Bind(wx.EVT_MENU, self._toggleHighlighting, self.hl_blops)
+        self.hl_blops.Check(self.options.Get("HlBlops", True))
+
+        self.hl_hic = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&HIC Losses\t(red)")
+        self.hl_sub.Bind(wx.EVT_MENU, self._toggleHighlighting, self.hl_hic)
+        self.hl_hic.Check(self.options.Get("HlHic", True))
+
+        self.hl_cyno = self.hl_sub.AppendCheckItem(wx.ID_ANY, "Cyno Characters (>" + "{:.0%}".format(config.CYNO_HL_PERCENTAGE) + " cyno losses)\t(blue)")
+        self.hl_sub.Bind(wx.EVT_MENU, self._toggleHighlighting, self.hl_cyno)
+        self.hl_cyno.Check(self.options.Get("HlCyno", True))
+
+        self.hl_list = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&Highlighted Entities List\t(pink)")
+        self.hl_sub.Bind(wx.EVT_MENU, self._toggleHighlighting, self.hl_list)
+        self.hl_list.Check(self.options.Get("HlList", True))
+
         # Toggle Stay on-top
         self.stay_ontop = self.view_menu.AppendCheckItem(
             wx.ID_ANY, 'Stay on-&top\tCTRL+T'
             )
         self.view_menu.Bind(wx.EVT_MENU, self._toggleStayOnTop, self.stay_ontop)
         self.stay_ontop.Check(self.options.Get("StayOnTop", True))
+
+        # Options Menubar
+        self.opt_menu = wx.Menu()
+
+        self.review_ignore = self.opt_menu.Append(wx.ID_ANY, "&Review Ignored Entities\tCTRL+R")
+        self.opt_menu.Bind(
+            wx.EVT_MENU,
+            self._openIgnoreDialog,
+            self.review_ignore
+        )
+
+        self.review_highlight = self.opt_menu.Append(wx.ID_ANY, "&Review Highlighted Entities\tCTRL+H")
+        self.opt_menu.Bind(
+            wx.EVT_MENU,
+            self._openHightlightDialog,
+            self.review_highlight
+        )
+
+        self.opt_menu.AppendSeparator()
+
+        self.clear_cache = self.opt_menu.Append(wx.ID_ANY, '&Clear Character Cache')
+        self.opt_menu.Bind(wx.EVT_MENU, self.clear_character_cache, self.clear_cache)
+        # self.file_about = self.file_menu.Append(wx.ID_ANY, '&About\tCTRL+A')
+        # self.file_menu.Bind(wx.EVT_MENU, self._openAboutDialog, self.file_about)
+
+        self.menubar.Append(self.opt_menu, 'Options')
 
         # Toggle Dark-Mode
         self.dark_mode = self.view_menu.AppendCheckItem(
@@ -119,6 +168,9 @@ class Frame(wx.Frame):
 
         # Bind double click on list item to zKill link.
         self.Bind(wx.grid.EVT_GRID_CELL_LEFT_DCLICK, self._goToZKill, self.grid)
+
+        # Bind right click on list item to ignore character.
+        self.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK, self._showContextMenu, self.grid)
 
         # Bind left click on column label to sorting
         self.Bind(wx.grid.EVT_GRID_COL_SORT, self.sortOutlist, self.grid)
@@ -322,23 +374,19 @@ class Frame(wx.Frame):
         # If updateList() gets called before outlist has been provided, do nothing
         if outlist is None:
             return
+        highlighted_list = self.options.Get("highlightedList", default=[])
         # Clean up grid
         if self.grid.GetNumberRows() > 0:
             self.grid.DeleteRows(numRows=self.grid.GetNumberRows())
         self.grid.AppendRows(len(outlist))
         # Add any NPSI fleet related characters to ignored_list
-        npsi_list = self.options.Get("NPSIList", default=[])
         ignored_list = self.options.Get("ignoredList", default=[])
         ignore_count = 0
         rowidx = 0
         for r in outlist:
-
             ignore = False
             for rec in ignored_list:
-                if r[0] == rec[0] or r[3] == rec[0] or r[5] == rec[0]:
-                    ignore = True
-            for rec in npsi_list:
-                if r[0] == rec[0]:
+                if r['id'] == rec[0] or r['corp_id'] == rec[0] or r['alliance_id'] == rec[0]:
                     ignore = True
             if ignore:
                 self.grid.HideRow(rowidx)
@@ -351,12 +399,12 @@ class Frame(wx.Frame):
                 r['name'],
                 r['corp_name'],
                 r['alliance_name'],
-                r['cyno'],
+                '{:.0%}'.format(r['cyno']),
                 r['average_pilots'],
                 r['timezone'],
                 r['top_ships'],
                 r['capital_use'],
-                r['blops_use'],
+                '{:.0%}'.format(r['blops_use']),
                 r['top_regions']
                 ]
             colidx = 0
@@ -366,6 +414,18 @@ class Frame(wx.Frame):
                 color = False
                 self.grid.SetCellValue(rowidx, colidx, str(value))
                 self.grid.SetCellAlignment(self.columns[colidx][2], rowidx, colidx, 0)
+                if self.options.Get("HlBlops", True) and r['blops_use'] > config.BLOPS_HL_PERCENTAGE:
+                    self.grid.SetCellTextColour(rowidx, colidx, self.hl1_colour)
+                    color = True
+                if self.options.Get("HlCyno", True) and r['cyno'] > config.CYNO_HL_PERCENTAGE:
+                    self.grid.SetCellTextColour(rowidx, colidx, self.hl2_colour)
+                    color = True
+
+                for entry in highlighted_list:  # Highlight chars from highlight list
+                    if self.options.Get("HlList", True) and (entry[0] == r['id'] or entry[0] == r['corp_id'] or entry[0] == r['alliance_id']):
+                        self.grid.SetCellTextColour(rowidx, colidx, self.hl3_colour)
+                        color = True
+
                 if not color:
                     self.grid.SetCellTextColour(rowidx, colidx, self.txt_colour)
                 colidx += 1
@@ -373,7 +433,6 @@ class Frame(wx.Frame):
 
         Logger.info(str(len(outlist)) + " characters analysed, in " + str(duration) + " seconds.")
         statusmsg.push_status(str(len(outlist)) + " characters analysed, in " + str(duration) + " seconds. Double click character to go to zKillboard.")
-
 
     def updateStatusbar(self, msg):
         '''Gets called by push_status() in statusmsg.py.'''
@@ -387,6 +446,138 @@ class Frame(wx.Frame):
         url = "https://zkillboard.com/character/" + str(character_id) + "/"
 
         webbrowser.open_new_tab(url)
+
+    def _showContextMenu(self, event):
+        '''
+        Gets invoked by right click on any list item and produces a
+        context menu that allows the user to add the selected character/corp/alliance
+        to PySpy's list of "ignored characters" which will no longer be
+        shown in search results and add the selected character/corp/alliance
+        to PySpy's list of "highlighted characters" which will hihglight them in the grid.
+        '''
+
+        def OnIgnore(id, name, type, e=None):
+            ignored_list = self.options.Get("ignoredList", default=[])
+            ignored_list.append([id, name, type])
+            self.options.Set("ignoredList", ignored_list)
+            self.updateList(self.options.Get("outlist", None))
+
+        def OnHighlight(id, name, type, e=None):
+            highlighted_list = self.options.Get("highlightedList", default=[])
+            if [id, name, type] not in highlighted_list:
+                highlighted_list.append([id, name, type])
+            self.options.Set("highlightedList", highlighted_list)
+            self.updateList(self.options.Get("outlist", None))
+
+        def OnDeHighlight(id, name, type, e=None):
+            highlighted_list = self.options.Get("highlightedList", default=[])
+            highlighted_list.remove([id, name, type])
+            self.options.Set("highlightedList", highlighted_list)
+            self.updateList(self.options.Get("outlist", None))
+
+        highlighted_list = self.options.Get("highlightedList", default=[])
+        rowidx = event.GetRow()
+        character_id = str(self.options.Get("outlist")[rowidx]['id'])
+        # Only open context menu character item right clicked, not empty line.
+        if len(character_id) > 0:
+            outlist = self.options.Get("outlist")
+            for r in outlist:
+                if str(r['id']) == character_id:
+                    character_id = r['id']
+                    character_name = r['name']
+                    corp_id = r['corp_id']
+                    corp_name = r['corp_name']
+                    alliance_id = r['alliance_id']
+                    alliance_name = r['alliance_name']
+                    break
+            self.menu = wx.Menu()
+            # Context menu to ignore characters, corporations and alliances.
+            item_ig_char = self.menu.Append(wx.ID_ANY, "Ignore character '" + character_name + "'")
+            self.menu.Bind(wx.EVT_MENU, lambda evt, id=character_id, name=character_name: OnIgnore(id, name, "Character", evt), item_ig_char)
+
+            item_ig_corp = self.menu.Append(wx.ID_ANY, "Ignore corporation: '" + corp_name + "'")
+            self.menu.Bind(wx.EVT_MENU, lambda evt, id=corp_id, name=corp_name: OnIgnore(id, name, "Corporation", evt), item_ig_corp)
+
+            if alliance_name != 'None':
+                item_ig_alliance = self.menu.Append(wx.ID_ANY, "Ignore alliance: '" + alliance_name + "'")
+                self.menu.Bind(wx.EVT_MENU, lambda evt, id=alliance_id, name=alliance_name: OnIgnore(id, name, "Alliance", evt), item_ig_alliance)
+
+            self.menu.AppendSeparator()
+
+            hl_char = False
+            hl_corp = False
+            hl_alliance = False
+
+            for entry in highlighted_list:
+                if entry[0] == self.options.Get("outlist")[rowidx]['id']:
+                    hl_char = True
+                if entry[0] == self.options.Get("outlist")[rowidx]['corp_id']:
+                    hl_corp = True
+                if alliance_name != 'None':
+                    if entry[0] == self.options.Get("outlist")[rowidx]['alliance_id']:
+                        hl_alliance = True
+
+            # Context menu to highlight characters, corporations and alliances
+            if not hl_char:
+                item_hl_char = self.menu.Append(
+                    wx.ID_ANY, "Highlight character '" + character_name + "'"
+                )
+                self.menu.Bind(
+                    wx.EVT_MENU,
+                    lambda evt, id=character_id, name=character_name: OnHighlight(id, name, "Character", evt),
+                    item_hl_char
+                )
+            else:
+                item_hl_char = self.menu.Append(
+                    wx.ID_ANY, "Stop highlighting character '" + character_name + "'"
+                )
+                self.menu.Bind(
+                    wx.EVT_MENU,
+                    lambda evt, id=character_id, name=character_name: OnDeHighlight(id, name, "Character", evt),
+                    item_hl_char
+                )
+
+            if not hl_corp:
+                item_hl_corp = self.menu.Append(
+                    wx.ID_ANY, "Highlight corporation '" + corp_name + "'"
+                )
+                self.menu.Bind(
+                    wx.EVT_MENU,
+                    lambda evt, id=corp_id, name=corp_name: OnHighlight(id, name, "Corporation", evt),
+                    item_hl_corp
+                )
+            else:
+                item_hl_corp = self.menu.Append(
+                    wx.ID_ANY, "Stop highlighting corporation '" + corp_name + "'"
+                )
+                self.menu.Bind(
+                    wx.EVT_MENU,
+                    lambda evt, id=corp_id, name=corp_name: OnDeHighlight(id, name, "Corporation", evt),
+                    item_hl_corp
+                )
+
+            if alliance_name != 'None':
+                if not hl_alliance:
+                    item_hl_alliance = self.menu.Append(
+                        wx.ID_ANY, "Highlight alliance: '" + alliance_name + "'"
+                    )
+                    self.menu.Bind(
+                        wx.EVT_MENU,
+                        lambda evt, id=alliance_id, name=alliance_name: OnHighlight(id, name, "Alliance", evt),
+                        item_hl_alliance
+                    )
+                else:
+                    item_hl_alliance = self.menu.Append(
+                        wx.ID_ANY, "Stop highlighting alliance: '" + alliance_name + "'"
+                    )
+                    self.menu.Bind(
+                        wx.EVT_MENU,
+                        lambda evt, id=alliance_id, name=alliance_name: OnDeHighlight(id, name, "Alliance", evt),
+                        item_hl_alliance
+                    )
+
+            self.PopupMenu(self.menu, event.GetPosition())
+            self.menu.Destroy()
 
     def sortOutlist(self, event=None, outlist=None, duration=None):
         """
@@ -435,6 +626,13 @@ class Frame(wx.Frame):
         self.options.Set("outlist", outlist)
         self.updateList(outlist, duration=duration)
 
+    def _toggleHighlighting(self, e):
+        self.options.Set("HlBlops", self.hl_blops.IsChecked())
+        self.options.Set("HlCyno", self.hl_cyno.IsChecked())
+        self.options.Set("HlHic", self.hl_hic.IsChecked())
+        self.options.Set("HlList", self.hl_list.IsChecked())
+        self.updateList(self.options.Get("outlist", None))
+
     def _toggleStayOnTop(self, evt=None):
         self.options.Set("StayOnTop", self.stay_ontop.IsChecked())
         self.ToggleWindowStyle(wx.STAY_ON_TOP)
@@ -457,6 +655,39 @@ class Frame(wx.Frame):
                 c.Raise()
                 return
         aboutdialog.showAboutBox(self)
+
+    def _openIgnoreDialog(self, evt=None):
+        '''
+        Checks if IgnoreDialog is already open. If not, opens the dialog
+        window, otherwise brings the existing dialog window to the front.
+        '''
+        for c in self.GetChildren():
+            if c.GetName() == "IgnoreDialog":  # Needs to match name in ignoredialog.py
+                c.Raise()
+                return
+        ignoredialog.showIgnoreDialog(self)
+
+    def _openHightlightDialog(self, evt=None):
+        '''
+        Checks if HightlightDialog is already open. If not, opens the dialog
+        window, otherwise brings the existing dialog window to the front.
+        '''
+        for c in self.GetChildren():
+            if c.GetName() == "HighlightDialog":  # Needs to match name in highlightdialog.py
+                c.Raise()
+                return
+        highlightdialog.showHighlightDialog(self)
+
+    def _openHightlightDialog(self, evt=None):
+        '''
+        Checks if HightlightDialog is already open. If not, opens the dialog
+        window, otherwise brings the existing dialog window to the front.
+        '''
+        for c in self.GetChildren():
+            if c.GetName() == "HighlightDialog":  # Needs to match name in highlightdialog.py
+                c.Raise()
+                return
+        highlightdialog.showHighlightDialog(self)
 
     def _restoreColWidth(self):
         """
@@ -518,6 +749,10 @@ class Frame(wx.Frame):
 
     def OnQuit(self, e):
         self.Close()
+
+    def clear_character_cache(self, e):
+        eveDB.clear_characters()
+        statusmsg.push_status("Cleared character cache")
 
 
 class App(wx.App):

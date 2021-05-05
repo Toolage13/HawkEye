@@ -85,6 +85,8 @@ ZKILL_MULTIPLIER = 1.5
 ZKILL_RETRY = 50
 MAX_CHUNK = 50
 GUI_TITLE = "HawkEye " + __version__
+CYNO_HL_PERCENTAGE = 0.01
+BLOPS_HL_PERCENTAGE = 0.01
 
 # Colour Scheme
 
@@ -93,8 +95,8 @@ DARK_MODE = {
     "TXT": wx.Colour(247, 160, 55),  # Yellow
     "LNE": wx.Colour(15, 15, 15),
     "LBL": wx.Colour(160, 160, 160),
-    "HL1": wx.Colour(237, 72, 59),  # Red
-    "HL2": wx.Colour(62, 157, 250),  # Blue
+    "HL1": wx.Colour(62, 157, 250),  # Blue
+    "HL2": wx.Colour(237, 72, 59),  # Red
     "HL3": wx.Colour(237, 47, 218)  # Pink
     }
 
