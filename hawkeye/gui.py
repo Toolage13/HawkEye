@@ -319,6 +319,7 @@ class Frame(wx.Frame):
         :param `duration`: Time in seconds taken to query all relevant
         databases for each character.
         '''
+        from . import app
         # If updateList() gets called before outlist has been provided, do nothing
         if outlist is None:
             return
