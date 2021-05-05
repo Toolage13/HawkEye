@@ -16,7 +16,7 @@ Logger = logging.getLogger(__name__)
 
 class eveDB:
     def __init__(self):
-        for file in ['invTypes.csv', 'invGroups.csv', 'mapSolarSystems.csv', 'mapRegions.csv','mapDenormalize.csv']:
+        for file in ['invTypes.csv', 'invGroups.csv', 'mapSolarSystems.csv', 'mapRegions.csv', 'mapDenormalize.csv']:
             if not os.path.exists(os.path.join(config.PREF_PATH, file)):
                 self.get_file(file)
 
@@ -408,8 +408,8 @@ class eveDB:
         headers = {'User-Agent': 'HawkEye, Author: Kain Tarr'}
         start_time = time.time()
         async with ClientSession() as session:
-            async with session.get(url, headers=headers) as resp:
-                while True:
+            while True:
+                async with session.get(url, headers=headers) as resp:
                     try:
                         r = await resp.json()
                         break

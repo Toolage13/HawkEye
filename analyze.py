@@ -29,7 +29,7 @@ def main(pilot_names, db):
     statusmsg.push_status("Updating corporation and alliance names from corporation and alliance IDs...")
     db.get_affil_names(affil_ids)
     character_stats = []
-    for chunk in divide_chunks(pilot_names, 50):
+    for chunk in divide_chunks(pilot_names, config.MAX_CHUNK):
         statusmsg.push_status("Retrieving killboard data for {}...".format(', '.join(chunk)))
         Logger.info('Running chunk {}'.format(chunk))
         start_time = time.time()
@@ -200,16 +200,19 @@ async def get_kill_data(pilot_name, db):
 
     stats['top_regions'] = ', '.join(get_top_three(stats['top_regions']))
     stats['top_ships'] = ', '.join(db.get_ship_name(i) for i in get_top_three(stats['top_ships']))
-    stats['cyno'] = '{}%'.format(round(stats['cyno'] / (stats['processed_killmails'] + 0.01) * 100))
-    stats['capital_use'] = '{}%'.format(round(stats['capital_use'] / (stats['processed_killmails'] + 0.01) * 100))
-    stats['blops_use'] = '{}%'.format(round(stats['blops_use'] / (stats['processed_killmails'] + 0.01) * 100))
-    if int(stats['blops_use'].split('%')[0]) > 0:
+    stats['cyno'] = '{}'.format(round(stats['cyno'] / (stats['processed_killmails'] + 0.01) * 100))
+    stats['capital_use'] = '{}'.format(round(stats['capital_use'] / (stats['processed_killmails'] + 0.01) * 100))
+    stats['blops_use'] = '{}'.format(round(stats['blops_use'] / (stats['processed_killmails'] + 0.01) * 100))
+    if float(stats['blops_use']) > 1:
         stats['warning'] += "BLOPS"
-        if int(stats['cyno'].split('%')[0]) > 0:
-            if stats['warning'] == '':
-                stats['warning'] = 'CYNO'
-            else:
-                stats['warning'] += " + CYNO"
+    if float(stats['cyno']) > 1:
+        if stats['warning'] == '':
+            stats['warning'] = 'CYNO'
+        else:
+            stats['warning'] += " + CYNO"
+    stats['blops_use'] += '%'
+    stats['cyno'] += '%'
+    stats['capital_use'] += '%'
     return stats
 
 
