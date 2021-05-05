@@ -4,7 +4,6 @@ import optstore
 import os
 import platform
 import sys
-import uuid
 import wx  # required for colour codes in DARK_MODE
 
 
@@ -75,16 +74,13 @@ if OPTIONS_OBJECT.Get("version", 0) != CURRENT_VER:
         if key != "uuid":
             OPTIONS_OBJECT.Del(key)
 
-# Unique identifier for usage statistics reporting
-if OPTIONS_OBJECT.Get("uuid", "not set") == "not set":
-    OPTIONS_OBJECT.Set("uuid", str(uuid.uuid4()))
-
 # Store version information
 OPTIONS_OBJECT.Set("version", CURRENT_VER)
 
 # Various constants
 MAX_NAMES = 500  # The max number of char names to be processed
 MAX_KM = 50  # Max number of killmails to process per character
+ZKILL_MULTIPLIER = 4
 GUI_TITLE = "HawkEye " + CURRENT_VER
 
 # Colour Scheme

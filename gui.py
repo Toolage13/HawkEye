@@ -208,7 +208,6 @@ class Frame(wx.Frame):
         sizer_bottom.Add(self.status_label, 1, wx.ALIGN_CENTER_VERTICAL, 0)
         static_line = wx.StaticLine(self, wx.ID_ANY, style=wx.LI_VERTICAL)
         sizer_bottom.Add(static_line, 0, wx.EXPAND, 0)
-        """ TURN BACK ON FOR PRODUCTION """
         sizer_main.Add(sizer_bottom)
         self.SetSizer(sizer_main)
         self.Layout()
@@ -395,7 +394,7 @@ class Frame(wx.Frame):
         """
         if event is None:
             # Default sort by character name ascending.
-            colidx = self.options.Get("SortColumn", self.columns[3][7])
+            colidx = self.options.Get("SortColumn", self.columns[3][0])
             sort_desc = self.options.Get("SortDesc", False)
         else:
             colidx = event.GetCol()

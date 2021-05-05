@@ -129,7 +129,7 @@ async def get_kill_data(pilot_name, db):
                 break
             try:
                 async with session.get(url, headers=headers) as resp:
-                    await asyncio.sleep(random.random())
+                    await asyncio.sleep(random.random() * config.ZKILL_MULTIPLIER)
                     text = await resp.text()
                     if text == "[]":
                         Logger.info('Returning empty killboard for {}'.format(pilot_name))
@@ -145,7 +145,7 @@ async def get_kill_data(pilot_name, db):
             except Exception as e:
                 Logger.error('Failed to get kills page for {} : {}'.format(pilot_name, url))
                 retry += 1
-                await asyncio.sleep(random.random())
+                await asyncio.sleep(random.random() * config.ZKILL_MULTIPLIER)
 
     if not data:
         stats['average_pilots'] = 'N/A'
