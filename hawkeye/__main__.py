@@ -63,6 +63,7 @@ def analyze_chars(char_names, db):
         )
 
 
-background_thread = threading.Thread(target=watch_clpbd, daemon=True)
-background_thread.start()
-app.MainLoop()
+def main():
+    background_thread = threading.Thread(target=watch_clpbd, daemon=True)
+    background_thread.start()
+    app.MainLoop()

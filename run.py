@@ -1,4 +1,4 @@
-from hawkeye import __main__
+from hawkeye.__main__ import main
 
 if __name__ == '__main__':
-    __main__.main()
+    main()
