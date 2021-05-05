@@ -125,7 +125,7 @@ async def get_kill_data(pilot_name, db):
         data = None
         while True:
             # Logger.info('Attempt {} for pilot {}.'.format(retry, pilot_name))
-            if retry == 3:
+            if retry == config.ZKILL_RETRY:
                 break
             try:
                 async with session.get(url, headers=headers) as resp:

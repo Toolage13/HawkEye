@@ -414,6 +414,7 @@ class eveDB:
                         r = await resp.json()
                         break
                     except Exception as e:
+                        Logger.warning(resp)
                         Logger.warning(e)
                         time.sleep(0.25)
         Logger.info('Requested {} and got it in {} seconds'.format(url, round(time.time() - start_time, 3)))

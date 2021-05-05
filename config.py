@@ -80,7 +80,8 @@ OPTIONS_OBJECT.Set("version", CURRENT_VER)
 # Various constants
 MAX_NAMES = 500  # The max number of char names to be processed
 MAX_KM = 50  # Max number of killmails to process per character
-ZKILL_MULTIPLIER = 4
+ZKILL_MULTIPLIER = 1.5
+ZKILL_RETRY = 10
 GUI_TITLE = "HawkEye " + CURRENT_VER
 
 # Colour Scheme
