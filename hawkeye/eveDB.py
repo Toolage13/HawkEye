@@ -1,5 +1,5 @@
 from aiohttp import ClientSession
-import config
+from hawkeye import config
 import csv
 import datetime
 import logging
@@ -7,9 +7,10 @@ import json
 from math import sqrt
 import os
 import requests
-import statusmsg
 import sqlite3
 import time
+from . import statusmsg
+from . import app
 
 Logger = logging.getLogger(__name__)
 
@@ -433,7 +434,7 @@ class eveDB:
             if None not in [d['corporation_id'] for d in results]:
                 return results
 
-        statusmsg.push_status("Retrieving character affiliation IDs...")
+        # statusmsg.push_status("Retrieving character affiliation IDs...")
         try:
             affiliations = post_req_ccp("characters/affiliation/", json.dumps(tuple(char_ids)))
             for mapping in affiliations:
@@ -465,7 +466,7 @@ class eveDB:
             if len(allcorp_ids) == 0:
                 return return_values
 
-        statusmsg.push_status("Obtaining corporation and alliance names and zKillboard data...")
+        statusmsg.push_status("Obtaining corporation and alliance names and zKillboard data...", app)
         try:
             names = post_req_ccp("universe/names/", json.dumps(tuple(allcorp_ids)))
         except:
@@ -526,7 +527,8 @@ def post_req_ccp(esi_path, json_data):
     except requests.exceptions.ConnectionError:
         Logger.info("No network connection.", exc_info=True)
         statusmsg.push_status(
-            "NETWORK ERROR: Check your internet connection and firewall settings."
+            "NETWORK ERROR: Check your internet connection and firewall settings.",
+            app
             )
         time.sleep(5)
         return "network_error"
@@ -540,7 +542,8 @@ def post_req_ccp(esi_path, json_data):
             str(r.status_code) + ", saying: " + server_msg, exc_info=True
             )
         statusmsg.push_status(
-            "CCP SERVER ERROR: " + str(r.status_code) + " (" + server_msg + ")"
+            "CCP SERVER ERROR: " + str(r.status_code) + " (" + server_msg + ")",
+            app
             )
         return "server_error"
     return r.json()

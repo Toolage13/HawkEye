@@ -1,11 +1,17 @@
 import logging.config
 import logging
-import optstore
+from . import optstore
 import os
 import platform
 import sys
 import uuid
 import wx  # required for colour codes in DARK_MODE
+from pkg_resources import get_distribution, DistributionNotFound
+
+try:
+    __version__ = get_distribution(__name__).version
+except DistributionNotFound:
+    __version__ = "Unknown Version"
 
 
 Logger = logging.getLogger(__name__)
@@ -55,17 +61,13 @@ DB_FILE = os.path.join(PREF_PATH, "hawkeye.sqlite3")
 # Persisten options object
 OPTIONS_OBJECT = optstore.PersistentOptions(OPTIONS_FILE)
 
-# Read current version from VERSION file
-with open(resource_path('VERSION'), 'r') as ver_file:
-    CURRENT_VER = ver_file.read().replace('\n', '')
-
 # Clean up old GUI_CFG_FILES and OPTIONS_OBJECT keys
 if os.path.isfile(GUI_CFG_FILE) and not os.path.isfile(OPTIONS_FILE):
     try:
         os.remove(GUI_CFG_FILE)
     except:
         pass
-if OPTIONS_OBJECT.Get("version", 0) != CURRENT_VER:
+if OPTIONS_OBJECT.Get("version", 0) != __version__:
     print("Config file erased.")
     try:
         os.remove(GUI_CFG_FILE)
@@ -80,12 +82,12 @@ if OPTIONS_OBJECT.Get("uuid", "not set") == "not set":
     OPTIONS_OBJECT.Set("uuid", str(uuid.uuid4()))
 
 # Store version information
-OPTIONS_OBJECT.Set("version", CURRENT_VER)
+OPTIONS_OBJECT.Set("version", __version__)
 
 # Various constants
 MAX_NAMES = 500  # The max number of char names to be processed
 MAX_KM = 50  # Max number of killmails to process per character
-GUI_TITLE = "HawkEye " + CURRENT_VER
+GUI_TITLE = "HawkEye " + __version__
 
 # Colour Scheme
 

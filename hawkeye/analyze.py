@@ -1,13 +1,13 @@
 import asyncio
 from aiohttp import ClientSession
-import config
-from eveDB import eveDB
+from hawkeye import config
 import json
 import logging
 import os
 import random
-import statusmsg
 import time
+from . import statusmsg
+from . import app
 
 Logger = logging.getLogger(__name__)
 
@@ -16,22 +16,22 @@ if not os.path.exists(os.path.join(config.PREF_PATH, 'kills/')):
 
 
 def main(pilot_names, db):
-    statusmsg.push_status("Retrieving pilot IDs from pilot names...")
+    statusmsg.push_status("Retrieving pilot IDs from pilot names...", app)
     loop = asyncio.new_event_loop()
     loop.run_until_complete(resolve_pilot_ids(pilot_names, db))
     loop.close()
-    statusmsg.push_status("Updating pilot corporations and alliances...")
+    statusmsg.push_status("Updating pilot corporations and alliances...", app)
     pilot_ids = db.query_characters(pilot_names)
     affiliations = db.get_char_affiliations(pilot_ids)
     affil_ids = []
     for a in affiliations:
         affil_ids.append(a.get('alliance_id'))
         affil_ids.append(a.get('corporation_id'))
-    statusmsg.push_status("Updating corporation and alliance names from corporation and alliance IDs...")
+    statusmsg.push_status("Updating corporation and alliance names from corporation and alliance IDs...", app)
     db.get_affil_names(affil_ids)
     character_stats = []
     for chunk in divide_chunks(pilot_names, 50):
-        statusmsg.push_status("Retrieving killboard data for {}...".format(', '.join(chunk)))
+        statusmsg.push_status("Retrieving killboard data for {}...".format(', '.join(chunk)), app)
         Logger.info('Running chunk {}'.format(chunk))
         start_time = time.time()
         loop = asyncio.new_event_loop()
@@ -312,7 +312,3 @@ def get_top_three(d):
         return sorted_categories[:3]
     except:
         return ['', '', '']
-
-
-if __name__ == '__main__':
-    print(main(['Kain Tarr', 'Bryan Tarr'], db=eveDB()))

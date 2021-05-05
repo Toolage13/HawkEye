@@ -84,7 +84,7 @@ class PersistentOptions():
         try:
             pickle_dir = os.path.dirname(pickle_file)
         except:
-            pickle_dir = "./"
+            pickle_dir = "../"
         pickle_data = data
         try:
             if not os.path.exists(pickle_dir):

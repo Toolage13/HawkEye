@@ -1,15 +1,17 @@
-import analyze
-from eveDB import eveDB
+from . import analyze
+from .eveDB import eveDB
 import logging
 import re
 import threading
 import time
 import wx
 import pyperclip
-import gui
-import statusmsg
+from . import statusmsg
+from . import app
 
 Logger = logging.getLogger(__name__)
+
+
 
 
 def watch_clpbd():
@@ -25,7 +27,7 @@ def watch_clpbd():
                 if valid is False:
                     break
             if valid:
-                statusmsg.push_status("Clipboard change detected...")
+                statusmsg.push_status("Clipboard change detected...", app)
                 recent_value = clipboard
                 analyze_chars(clipboard.splitlines(), db)
         time.sleep(0.5)  # Short sleep between loops to reduce CPU load
@@ -56,7 +58,8 @@ def analyze_chars(char_names, db):
                 )
         else:
             statusmsg.push_status(
-                "No valid character names found. Please try again..."
+                "No valid character names found. Please try again...",
+                app
                 )
     except Exception:
         Logger.error(
@@ -65,7 +68,6 @@ def analyze_chars(char_names, db):
         )
 
 
-app = gui.App(0)  # Has to be defined before background thread starts.
 background_thread = threading.Thread(target=watch_clpbd, daemon=True)
 background_thread.start()
 app.MainLoop()

@@ -1,9 +1,9 @@
-import aboutdialog
-import config
+from . import aboutdialog
+from hawkeye import config
 import logging
 import os
-import sortarray
-import statusmsg
+from . import sortarray
+from . import statusmsg
 import webbrowser
 import wx
 import wx.grid as WXG
@@ -372,7 +372,7 @@ class Frame(wx.Frame):
                 colidx += 1
             rowidx += 1
 
-        statusmsg.push_status(str(len(outlist)) + " characters analysed, in " + str(duration) + " seconds. Double click " + "character to go to zKillboard.")
+        # statusmsg.push_status(str(len(outlist)) + " characters analysed, in " + str(duration) + " seconds. Double click " + "character to go to zKillboard.")
         Logger.info(str(len(outlist)) + " characters analysed, in " + str(duration) + " seconds.")
 
 
@@ -395,7 +395,7 @@ class Frame(wx.Frame):
         """
         if event is None:
             # Default sort by character name ascending.
-            colidx = self.options.Get("SortColumn", self.columns[3][7])
+            colidx = self.options.Get("SortColumn", self.columns[3][0])
             sort_desc = self.options.Get("SortDesc", False)
         else:
             colidx = event.GetCol()

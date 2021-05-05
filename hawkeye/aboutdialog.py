@@ -1,4 +1,4 @@
-import config
+from hawkeye import config
 import logging
 import wx
 import wx.adv
