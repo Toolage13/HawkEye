@@ -10,18 +10,19 @@ import time
 
 Logger = logging.getLogger(__name__)
 
-if not os.path.exists(os.path.join(config.PREF_PATH, 'kills/')):
-    os.makedirs(os.path.join(config.PREF_PATH, 'kills/'))
-
 
 def main(pilot_names, db):
     ignore_list = config.OPTIONS_OBJECT.Get("ignoredList")
     Logger.info('Removing pilots {} from list to retrieve.'.format([p for p in pilot_names if p in [i[1] for i in ignore_list]]))
     new_pilot_names = [p for p in pilot_names if p not in [i[1] for i in ignore_list]]
-    statusmsg.push_status("Retrieving pilot IDs from pilot names...")
+    statusmsg.push_status("Gathering {} pilot IDs from CCP...".format(len(new_pilot_names)))
+    Logger.info("Gathering {} pilot IDs from CCP...".format(len(new_pilot_names)))
+    start_time = time.time()
     loop = asyncio.new_event_loop()
     loop.run_until_complete(resolve_pilot_ids(new_pilot_names, db))
     loop.close()
+    statusmsg.push_status("Gathered {} pilot IDs from CCP in {} seconds.".format(len(new_pilot_names), round(time.time() - start_time, 2)))
+    Logger.info("Gathered {} pilot IDs from CCP in {} seconds.".format(len(new_pilot_names), round(time.time() - start_time, 2)))
     pilot_ids = db.query_characters(new_pilot_names)
     transform_ignore = {i[0]: i[1] for i in ignore_list}
     for p in pilot_ids:
@@ -36,26 +37,25 @@ def main(pilot_names, db):
     if len(pilot_ids) == 0:
         Logger.info('Filtered out all pilots provided...')
         return None
-    statusmsg.push_status("Updating pilot corporations and alliances...")
     affiliations = db.get_char_affiliations([p['char_id'] for p in pilot_ids])
     affil_ids = []
     for a in affiliations:
         affil_ids.append(a.get('alliance_id'))
         affil_ids.append(a.get('corporation_id'))
-    statusmsg.push_status("Updating corporation and alliance names from corporation and alliance IDs...")
     db.get_affil_names(affil_ids)
     character_stats = []
     for chunk in divide_chunks(pilot_ids, config.MAX_CHUNK):
         statusmsg.push_status("Retrieving killboard data for {}...".format(', '.join([c['char_name'] for c in chunk])))
-        Logger.info('Running chunk {}'.format(chunk))
+        Logger.info('Running {} pilots through concurrent_run_character(...)'.format(len(chunk)))
         start_time = time.time()
         loop = asyncio.new_event_loop()
         details = loop.run_until_complete(concurrent_run_character(chunk, db))
         loop.close()
         for c in details:
             character_stats.append(c)
-        Logger.info('Ran chunk in {} seconds.'.format(time.time() - start_time))
-    return (character_stats, len(pilot_names) - len(pilot_ids))
+        statusmsg.push_status('Ran {} pilots in {} seconds.'.format(len(chunk), round(time.time() - start_time, 2)))
+        Logger.info('Ran {} pilots in {} seconds.'.format(len(chunk), round(time.time() - start_time, 2)))
+    return character_stats, len(pilot_names) - len(pilot_ids)
 
 
 def divide_chunks(l, n):
@@ -136,12 +136,13 @@ async def get_kill_data(pilot_name, db):
 
     url = "https://zkillboard.com/api/kills/characterID/{}/page/{}/".format(pilot_id, 1)
     headers = {'Accept-Encoding': 'gzip', 'User-Agent': 'HawkEye, Author: Kain Tarr'}
+    statusmsg.push_status('Requesting {}'.format(url))
+    Logger.info('Requesting {}'.format(url))
     start_time = time.time()
     async with ClientSession() as session:
         retry = 0
         data = None
         while True:
-            # Logger.info('Attempt {} for pilot {}.'.format(retry, pilot_name))
             if retry == config.ZKILL_RETRY:
                 break
             try:
@@ -149,7 +150,7 @@ async def get_kill_data(pilot_name, db):
                     await asyncio.sleep(random.random() * config.ZKILL_MULTIPLIER)
                     text = await resp.text()
                     if text == "[]":
-                        Logger.info('Returning empty killboard for {}'.format(pilot_name))
+                        Logger.info('Returning empty killboard for {}'.format(pilot_name['char_name']))
                         return stats
                     data = await resp.json()
                 break
@@ -161,12 +162,11 @@ async def get_kill_data(pilot_name, db):
     if not data:
         stats['name'] = 'ZKILL RATE LIMITED (429)'
         return stats
+    statusmsg.push_status('Requested {} and got it in {} seconds'.format(url, round(time.time() - start_time, 2)))
+    Logger.info('Requested {} and got it in {} seconds'.format(url, round(time.time() - start_time, 2)))
 
-    Logger.info('Requested {} and got it in {} seconds'.format(url, round(time.time() - start_time, 3)))
-
-    Logger.info('Retrieving killmail data from CCP ESI for {}'.format(pilot_name))
     data = data[:config.MAX_KM]
-    details = await process(data, db)
+    details = await process(data)
 
     for killmail in details:
         stats['processed_killmails'] += 1
@@ -247,15 +247,26 @@ def add_string(o, n):
     return '{} + {}'.format(o, n)
 
 
-async def process(data, db):
+def fetch_local(killmail_id):
+    try:
+        with open(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(killmail_id)), 'r') as json_file:
+            return json.load(json_file)
+    except FileNotFoundError:
+        return None
+
+
+async def process(data):
     """
     :param data: zkill data
     :return: None
     """
+    if not os.path.exists(os.path.join(config.PREF_PATH, 'kills/')):
+        os.makedirs(os.path.join(config.PREF_PATH, 'kills/'))
+
     result_killmails = []
 
     for zkill in data:
-        r = db.get_killmail(zkill['killmail_id'])
+        r = fetch_local(zkill['killmail_id'])
         if r:
             new_dict = {}
             for k in zkill:
@@ -266,30 +277,35 @@ async def process(data, db):
     data[:] = [z for z in data if z['killmail_id'] not in [d['killmail_id'] for d in result_killmails]]
     Logger.info('Got {} killmails from local cache.'.format(len(result_killmails)))
 
+    ccp_kills = []
     if len(data) > 0:
+        statusmsg.push_status('Gathering {} killmails from CCP servers.'.format(len(data)))
+        Logger.info('Gathering {} killmails from CCP servers.'.format(len(data)))
         start_time = time.time()
         async with ClientSession() as session:
             for d in data:
-                att = asyncio.ensure_future(fetch(d, session, db))
-                result_killmails.append(att)
+                att = asyncio.ensure_future(fetch(d, session))
+                ccp_kills.append(att)
 
-            results = await asyncio.gather(*result_killmails)
-        Logger.info('Gathered {} killmails from CCP servers in {} seconds'.format(len(data), time.time() - start_time))
+            results = await asyncio.gather(*ccp_kills)
+        statusmsg.push_status('Gathered {} killmails from CCP servers in {} seconds'.format(len(data), round(time.time() - start_time, 2)))
+        Logger.info('Gathered {} killmails from CCP servers in {} seconds'.format(len(data), round(time.time() - start_time, 2)))
 
-    merged_kills = []
-    for zkill in data:
-        for ccpkill in results:
-            if zkill['killmail_id'] == ccpkill['killmail_id']:
-                new_dict = {}
-                for k in zkill:
-                    new_dict[k] = zkill[k]
-                for k in ccpkill:
-                    new_dict[k] = ccpkill[k]
-                merged_kills.append(new_dict)
-    return merged_kills
+        results = [json.loads(kill) for kill in results]
+
+        for zkill in data:
+            for ccpkill in results:
+                if zkill['killmail_id'] == ccpkill['killmail_id']:
+                    new_dict = {}
+                    for k in zkill:
+                        new_dict[k] = zkill[k]
+                    for k in ccpkill:
+                        new_dict[k] = ccpkill[k]
+                    result_killmails.append(new_dict)
+    return result_killmails
 
 
-async def fetch(d, session, db):
+async def fetch(d, session):
     """
     :param d:
     :param session:
@@ -301,9 +317,9 @@ async def fetch(d, session, db):
         try:
             async with session.get(url) as response:
                 r = await response.read()
-                s = json.loads(r)
-                await db.store_killmail(s)
-                return s
+                with open(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(d['killmail_id'])), 'w') as file:
+                    json.dump(json.loads(r), file)
+                return r
         except Exception as e:
             Logger.error(e)
             await asyncio.sleep(0.25)

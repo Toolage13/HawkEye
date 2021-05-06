@@ -1,6 +1,4 @@
 from aiohttp import ClientSession
-import aiosqlite
-import asyncio
 import config
 import csv
 import datetime
@@ -18,6 +16,8 @@ Logger = logging.getLogger(__name__)
 
 class eveDB:
     def __init__(self):
+        self.db_queue = []
+
         for file in ['invTypes.csv', 'invGroups.csv', 'mapSolarSystems.csv', 'mapRegions.csv', 'mapDenormalize.csv']:
             if not os.path.exists(os.path.join(config.PREF_PATH, file)):
                 self.get_file(file)
@@ -25,8 +25,6 @@ class eveDB:
         Logger.info('Creating eveDB object...')
         self.connection = sqlite3.connect(":memory:", check_same_thread=False)
         self.cursor = self.connection.cursor()
-        self.load_tables()
-
         self.blops = None
         self.capital_ships = None
         self.gate_positions = {}
@@ -42,20 +40,13 @@ class eveDB:
         self.smartbomb_ids = None
         self.super = None
         self.titan = None
+        self.load_tables()
 
         self.local_db = sqlite3.connect(os.path.join(config.PREF_PATH, 'characters.db'),
                                         check_same_thread=False,
                                         detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
         self.local_c = self.local_db.cursor()
         self.prepare_local_db()
-
-        self.local_km = aiosqlite.connect(os.path.join(config.PREF_PATH, 'killmails.db'))
-        self.local_ckm = self.local_km.cursor()
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(self.prepare_local_km())
-        loop.close()
-
-        Logger.info('eveDB object created...')
 
     def __enter__(self):
         return self
@@ -269,12 +260,14 @@ class eveDB:
                                 last_update timestamp)""")
 
     async def prepare_local_km(self):
-        await self.local_ckm.execute("""create table if not exists killmails(
+        self.local_km = await aiosqlite.connect(os.path.join(config.PREF_PATH, 'killmails.db'))
+        self.local_ckm = await self.local_km.cursor()
+        await self.local_km.execute("""create table if not exists killmails(
                                         killmail_id int,
                                         killmail_time str,
                                         solar_system_id int)""")
 
-        await self.local_ckm.execute("""create table if not exists victims(
+        await self.local_km.execute("""create table if not exists victims(
                                         killmail_id int,
                                         alliance_id int,
                                         character_id int,
@@ -282,7 +275,7 @@ class eveDB:
                                         damage_taken int,
                                         ship_type_id int)""")
 
-        await self.local_ckm.execute("""create table if not exists items(
+        await self.local_km.execute("""create table if not exists items(
                                         killmail_id int,
                                         flag int,
                                         item_type_id int,
@@ -290,13 +283,13 @@ class eveDB:
                                         quantity_dropped int,
                                         singleton int)""")
 
-        await self.local_ckm.execute("""create table if not exists position(
+        await self.local_km.execute("""create table if not exists position(
                                         killmail_id int,
                                         x real,
                                         y real,
                                         z real)""")
 
-        await self.local_ckm.execute("""create table if not exists attackers(
+        await self.local_km.execute("""create table if not exists attackers(
                                         killmail_id int,
                                         alliance_id int,
                                         character_id int,
@@ -618,9 +611,19 @@ class eveDB:
         self.local_c.execute("""select char_id, char_name, corp_id, alliance_id from characters where char_name in ({})""".format(','.join(['?'] * len(char_names))), char_names)
         return [{'char_id': r[0], 'char_name': r[1], 'corp_id': r[2], 'alliance_id': r[3]} for r in self.local_c.fetchall()]
 
+    def queue_killmail(self, json_data):
+        self.db_queue.append(json_data)
+
+    async def process_queue(self):
+        l = len(self.db_queue)
+        for j in self.db_queue:
+            await self.store_killmail(j)
+        self.db_queue = []
+        return l
+
     async def insert_sql(self, table, columns, values):
         sql = """insert into {} (killmail_id, {}) values ({})""".format(table, ', '.join(columns), ','.join('?'*len(values)))
-        await self.local_ckm.execute(sql, tuple(values))
+        await self.local_km.execute(sql, tuple(values))
         await self.local_km.commit()
 
     async def store_killmail(self, json_data):
@@ -649,8 +652,8 @@ class eveDB:
 
     async def get_killmail(self, killmail_id):
         d = {}
-        self.local_ckm.execute("select killmail_time, solar_system_id from killmails where killmail_id = ?", (killmail_id, ))
-        r = self.local_ckm.fetchone()
+        await self.local_km.execute("select killmail_time, solar_system_id from killmails where killmail_id = ?", (killmail_id, ))
+        r = await self.local_ckm.fetchone()
         if not r:
             return None
         d['killmail_id'] = killmail_id
@@ -658,16 +661,16 @@ class eveDB:
         d['solar_system_id'] = r[1]
 
         m = ['alliance_id', 'character_id', 'corporation_id', 'damage_taken', 'ship_type_id']
-        self.local_ckm.execute("select {} from victims where killmail_id = ?".format(', '.join(m)), (killmail_id, ))
-        r = self.local_ckm.fetchone()
+        await self.local_km.execute("select {} from victims where killmail_id = ?".format(', '.join(m)), (killmail_id, ))
+        r = await self.local_ckm.fetchone()
         victim = {}
         for i in m:
             victim[i] = r[m.index(i)]
         d['victim'] = victim
 
         m = ['flag', 'item_type_id', 'quantity_destroyed', 'quantity_dropped', 'singleton']
-        self.local_ckm.execute("select {} from items where killmail_id = ?".format(', '.join(m)), (killmail_id, ))
-        r = self.local_ckm.fetchall()
+        await self.local_km.execute("select {} from items where killmail_id = ?".format(', '.join(m)), (killmail_id, ))
+        r = await self.local_ckm.fetchall()
         items = []
         for item in r:
             new_dict = {}
@@ -677,16 +680,16 @@ class eveDB:
         d['victim']['items'] = items
 
         m = ['x', 'y', 'z']
-        self.local_ckm.execute("select {} from position where killmail_id = ?".format(', '.join(m)), (killmail_id, ))
-        r = self.local_ckm.fetchone()
+        await self.local_km.execute("select {} from position where killmail_id = ?".format(', '.join(m)), (killmail_id, ))
+        r = await self.local_ckm.fetchone()
         position = {}
         for i in m:
             position[i] = r[m.index(i)]
         d['victim']['position'] = position
 
         m = ['alliance_id', 'character_id', 'corporation_id', 'damage_done', 'final_blow', 'security_status', 'ship_type', 'weapon_type_id']
-        self.local_ckm.execute("select {} from attackers where killmail_id = ?".format(', '.join(m)), (killmail_id, ))
-        r = self.local_ckm.fetchall()
+        await self.local_km.execute("select {} from attackers where killmail_id = ?".format(', '.join(m)), (killmail_id, ))
+        r = await self.local_ckm.fetchall()
         attackers = []
         for att in r:
             new_dict = {}
@@ -699,9 +702,9 @@ class eveDB:
 
 
 def clear_characters():
-    db = aiosqlite.connect(os.path.join(config.PREF_PATH, 'characters.db'),
+    db = sqlite3.connect(os.path.join(config.PREF_PATH, 'characters.db'),
                          check_same_thread=False,
-                         detect_types=aiosqlite.PARSE_DECLTYPES | aiosqlite.PARSE_COLNAMES
+                         detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
                          )
     c = db.cursor()
     c.execute("""delete from characters""")
