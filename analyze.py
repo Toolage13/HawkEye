@@ -16,74 +16,57 @@ import time
 Logger = logging.getLogger(__name__)
 
 
-def _filter_pilots(pilot_names):
-    """
-    Get ignoredList from config, filter our list of pilot_names based on the pilot names stored in ignoredList
-    :param pilot_names: List of pilot names
-    :return: Filtered list
-    """
-    ignore_list = config.OPTIONS_OBJECT.Get("ignoredList", default=[])
-    Logger.info("Removing pilots {} from list to retrieve.".format(
-        [p for p in pilot_names if p in [i[1] for i in ignore_list]]))
-    return [p for p in pilot_names if p not in [i[1] for i in ignore_list]]
-
-
-def _retrieve_pilot_ids(pilot_names, db):
-    """
-    Retrieve pilot IDs,
-    """
-
-    stored_pilot_ids = db.get_stored_pilot_ids(pilot_names)
-
-    pilot_ids_from_ccp = _fetch_pilot_ids_from_ccp()
-
 def main(pilot_names, db):
-    new_pilot_names = _filter_pilots(pilot_names)
+    filtered_pilot_data = _filter_pilots(pilot_names, db)
 
-    statusmsg.push_status("Gathering {} pilot IDs from CCP...".format(len(new_pilot_names)))
-    Logger.info("Gathering {} pilot IDs from CCP...".format(len(new_pilot_names)))
-    start_time = time.time()
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(resolve_pilot_ids(new_pilot_names, db))
-    loop.close()
-    statusmsg.push_status("Gathered {} pilot IDs from CCP in {} seconds.".format(len(new_pilot_names), round(time.time() - start_time, 2)))
-    Logger.info("Gathered {} pilot IDs from CCP in {} seconds.".format(len(new_pilot_names), round(time.time() - start_time, 2)))
-
-    pilot_ids = db.query_characters(new_pilot_names)
-    transform_ignore = {i[0]: i[1] for i in ignore_list}
-    for p in pilot_ids:
-        if p['corp_id'] in transform_ignore.keys():
-            Logger.info('Removing pilot {} from list to retrieve ({}).'.format(p['char_name'], transform_ignore[p['corp_id']]))
-    pilot_ids = [p for p in pilot_ids if p['corp_id'] not in transform_ignore.keys()]
-    for p in pilot_ids:
-        if p['alliance_id'] in transform_ignore.keys():
-            Logger.info(
-                'Removing pilot {} from list to retrieve ({}).'.format(p['char_name'], transform_ignore[p['alliance_id']]))
-    pilot_ids = [p for p in pilot_ids if p['alliance_id'] not in transform_ignore.keys()]
-
-    if len(pilot_ids) == 0:
+    if len(filtered_pilot_data) == 0:
         Logger.info('Filtered out all pilots provided...')
         return None
-    affiliations = db.get_char_affiliations([p['char_id'] for p in pilot_ids])
-    affil_ids = []
-    for a in affiliations:
-        affil_ids.append(a.get('alliance_id'))
-        affil_ids.append(a.get('corporation_id'))
-    db.get_affil_names(affil_ids)
 
     character_stats = []
-    for chunk in divide_chunks(pilot_ids, config.MAX_CHUNK):
-        statusmsg.push_status("Retrieving killboard data for {}...".format(', '.join([c['char_name'] for c in chunk])))
+    for chunk in divide_chunks(filtered_pilot_data, config.MAX_CHUNK):
+        statusmsg.push_status("Retrieving killboard data for {}...".format(', '.join([c['pilot_name'] for c in chunk])))
         Logger.info('Running {} pilots through concurrent_run_character(...)'.format(len(chunk)))
         start_time = time.time()
         loop = asyncio.new_event_loop()
-        details = loop.run_until_complete(concurrent_run_character(chunk, db))
+        details = loop.run_until_complete(_concurrent_run_character(chunk, db))
         loop.close()
         for c in details:
             character_stats.append(c)
         statusmsg.push_status('Ran {} pilots in {} seconds.'.format(len(chunk), round(time.time() - start_time, 2)))
         Logger.info('Ran {} pilots in {} seconds.'.format(len(chunk), round(time.time() - start_time, 2)))
-    return character_stats, len(pilot_names) - len(pilot_ids)
+    return character_stats, len(filtered_pilot_data) - len(pilot_names)
+
+
+def _filter_pilots(pilot_names, db):
+    """
+    Get ignoredList from config, filter our list of pilot_names based on the pilot names stored in ignoredList
+    :param pilot_names: List of pilot names
+    :param db: EveDB object to run queries on
+    :return: Filtered list
+    """
+    ignore_list = config.OPTIONS_OBJECT.Get("ignoredList", default=[])
+    filtered_by_name = [p for p in pilot_names if p not in [i[1] for i in ignore_list]]
+    if len(filtered_by_name) == 0:
+        return []
+
+    loop = asyncio.new_event_loop()
+    pilot_map = loop.run_until_complete(_get_pilot_ids(filtered_by_name, db))
+    loop.close()
+
+    pilot_affiliations = db.get_pilot_affiliations(pilot_map)
+    return [p for p in pilot_affiliations if p['corp_id'] not in [i[0] for i in ignore_list] and p['alliance_id'] not in [i[0] for i in ignore_list]]
+
+
+async def _get_pilot_ids(pilot_names, db):
+    """
+    Gather pilot IDs by calling db.get_pilot_id() asynchronously
+    :param pilot_names: List of pilot names
+    :param db: EveDB object to run queries on
+    :return: List of pilot IDs
+    """
+    coros = [db.get_pilot_id(p) for p in pilot_names]
+    return await asyncio.gather(*coros)
 
 
 def divide_chunks(l, n):
@@ -91,22 +74,16 @@ def divide_chunks(l, n):
         yield l[i:i + n]
 
 
-async def _resolve_pilot_ids(pilot_names, db):
-    coros = [db.get_pilot_ids(p) for p in pilot_names]
-    await asyncio.gather(*coros)
-
-
-async def concurrent_run_character(pilot_names, db):
-    coros = [get_kill_data(p, db) for p in pilot_names]
+async def _concurrent_run_character(pilot_chunk, db):
+    coros = [_get_kill_data(p, db) for p in pilot_chunk]
     return await asyncio.gather(*coros)
 
 
-async def get_kill_data(pilot_name, db):
-    Logger.info('Getting kill data for {}.'.format(pilot_name['char_name']))
-    pilot_id = await db.get_pilot_id(pilot_name['char_name'])
+async def _get_kill_data(pilot_data, db):
+    Logger.info('Getting kill data for {}.'.format(pilot_data['pilot_name']))
     stats = {
-        'alliance_id': pilot_name['alliance_id'],
-        'alliance_name': 'None',
+        'alliance_id': pilot_data['alliance_id'],
+        'alliance_name': pilot_data['alliance_name'],
         'autz': {'kills': 0.01, 'attackers': 0},
         'average_kill_value': 0,
         'average_pilots': 0,
@@ -117,8 +94,8 @@ async def get_kill_data(pilot_name, db):
         'buttbuddies': {},
         'capital_use': 0,
         'coastal_city_elite': 0,
-        'corp_id': pilot_name['corp_id'],
-        'corp_name': '',
+        'corp_id': pilot_data['corp_id'],
+        'corp_name': pilot_data['corp_name'],
         'countryside_hillbilly': 0,
         'cyno': 0,
         'dream_crusher': 0,
@@ -126,10 +103,10 @@ async def get_kill_data(pilot_name, db):
         'gopnik': 0,
         'heavy_hitter': 0,
         'hotdrop': 0,
-        'id': pilot_id,
         'involved_pilots': [],
-        'name': pilot_name['char_name'],
         'nanofag': 0,
+        'pilot_id': pilot_data['pilot_id'],
+        'pilot_name': pilot_data['pilot_name'],
         'playstyle': 'None',
         'pro_10': 0,
         'pro_gang': 0,
@@ -148,20 +125,19 @@ async def get_kill_data(pilot_name, db):
         'warning': ''
     }
 
-    if not pilot_id:
+    zkill_data = await _get_zkill_data(pilot_data['pilot_id'], pilot_data['pilot_name'])
+
+    if not zkill_data:
+        stats['name'] = 'ZKILL-MISSING'
         return stats
 
-    affil_ids = db.get_char_affiliations([pilot_id])
-    stats['corp_id'] = affil_ids[0]['corporation_id']
-    stats['alliance_id'] = affil_ids[0].get('alliance_id')
-    affiliations = db.get_affil_names([affil_ids[0]['corporation_id'], affil_ids[0].get('alliance_id')])
+    zkill_data = zkill_data[:config.MAX_KM]
+    merged_kills = await _merge_zkill_ccp_kills(zkill_data)
 
-    for d in affiliations:
-        if affil_ids[0]['corporation_id'] == d['id']:
-            stats['corp_name'] = d['name']
-        if affil_ids[0].get('alliance_id') == d['id']:
-            stats['alliance_name'] = d['name']
+    return _prepare_stats(stats, merged_kills, db, pilot_data['pilot_id'])
 
+
+async def _get_zkill_data(pilot_id, pilot_name):
     url = "https://zkillboard.com/api/kills/characterID/{}/page/{}/".format(pilot_id, 1)
     headers = {'Accept-Encoding': 'gzip', 'User-Agent': 'HawkEye, Author: Kain Tarr'}
     statusmsg.push_status('Requesting {}'.format(url))
@@ -178,27 +154,101 @@ async def get_kill_data(pilot_name, db):
                     await asyncio.sleep(random.random() * config.ZKILL_MULTIPLIER)
                     text = await resp.text()
                     if text == "[]":
-                        Logger.info('Returning empty killboard for {}'.format(pilot_name['char_name']))
-                        return stats
+                        Logger.info('Returning empty killboard for {}'.format(pilot_name))
+                        return data
                     data = await resp.json()
                 break
             except Exception as e:
-                Logger.error('Failed to get kills page for {} : {}'.format(pilot_name['char_name'], url))
+                Logger.error('Failed to get kills page for {} : {}'.format(pilot_name, url))
                 retry += 1
                 await asyncio.sleep(random.random() * config.ZKILL_MULTIPLIER)
-
-    if not data:
-        stats['name'] = 'ZKILL RATE LIMITED (429)'
-        return stats
     statusmsg.push_status('Requested {} and got it in {} seconds'.format(url, round(time.time() - start_time, 2)))
     Logger.info('Requested {} and got it in {} seconds'.format(url, round(time.time() - start_time, 2)))
+    return data
 
-    data = data[:config.MAX_KM]
-    details = await process(data)
 
-    for killmail in details:
+async def _merge_zkill_ccp_kills(data):
+    """
+    :param data: zkill data
+    :return: None
+    """
+    if not os.path.exists(os.path.join(config.PREF_PATH, 'kills/')):
+        os.makedirs(os.path.join(config.PREF_PATH, 'kills/'))
+
+    result_killmails = []
+
+    for zkill in data:
+        r = _fetch_local(zkill['killmail_id'])
+        if r:
+            new_dict = {}
+            for k in zkill:
+                new_dict[k] = zkill[k]
+            for k in r:
+                new_dict[k] = r[k]
+            result_killmails.append(new_dict)
+    data[:] = [z for z in data if z['killmail_id'] not in [d['killmail_id'] for d in result_killmails]]
+    Logger.info('Got {} killmails from local cache.'.format(len(result_killmails)))
+
+    ccp_kills = []
+    if len(data) > 0:
+        statusmsg.push_status('Gathering {} killmails from CCP servers.'.format(len(data)))
+        Logger.info('Gathering {} killmails from CCP servers.'.format(len(data)))
+        start_time = time.time()
+        async with ClientSession() as session:
+            for d in data:
+                att = asyncio.ensure_future(_fetch(d, session))
+                ccp_kills.append(att)
+
+            results = await asyncio.gather(*ccp_kills)
+        statusmsg.push_status('Gathered {} killmails from CCP servers in {} seconds'.format(len(data), round(time.time() - start_time, 2)))
+        Logger.info('Gathered {} killmails from CCP servers in {} seconds'.format(len(data), round(time.time() - start_time, 2)))
+
+        results = [json.loads(kill) for kill in results]
+
+        for zkill in data:
+            for ccpkill in results:
+                if zkill['killmail_id'] == ccpkill['killmail_id']:
+                    new_dict = {}
+                    for k in zkill:
+                        new_dict[k] = zkill[k]
+                    for k in ccpkill:
+                        new_dict[k] = ccpkill[k]
+                    result_killmails.append(new_dict)
+    return result_killmails
+
+
+def _fetch_local(killmail_id):
+    try:
+        with open(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(killmail_id)), 'r') as json_file:
+            return json.load(json_file)
+    except FileNotFoundError:
+        return None
+
+
+async def _fetch(d, session):
+    """
+    :param d:
+    :param session:
+    :return: json response parsed into dictionary
+    """
+
+    url = "https://esi.evetech.net/v1/killmails/{}/{}/?datasource=tranquility".format(d['killmail_id'], d['zkb']['hash'])
+    while True:
+        try:
+            async with session.get(url) as response:
+                r = await response.read()
+                with open(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(d['killmail_id'])), 'w') as file:
+                    json.dump(json.loads(r), file)
+                return r
+        except Exception as e:
+            Logger.error(e)
+            await asyncio.sleep(0.25)
+
+
+def _prepare_stats(stats, killmails, db, pilot_id):
+    for killmail in killmails:
         stats['processed_killmails'] += 1
-        stats['top_regions'] = add_to_dict(stats['top_regions'], db.get_region(killmail['solar_system_id']))
+        stats['top_regions'] = _add_to_dict(stats['top_regions'], db.get_region(killmail['solar_system_id']))
         stats['average_pilots'] += len(killmail['attackers'])
         if len(killmail['attackers']) > 9:
             stats['avg_10'] += len(killmail['attackers'])
@@ -208,21 +258,21 @@ async def get_kill_data(pilot_name, db):
             stats['pro_gang'] += 1
         stats['average_kill_value'] += float(killmail['zkb']['totalValue'])
         stats[db.get_location(killmail['solar_system_id'])] += 1
-        stats[get_timezone(killmail['killmail_time'])]['kills'] += 1
-        stats[get_timezone(killmail['killmail_time'])]['attackers'] += len(killmail['attackers'])
+        stats[_get_timezone(killmail['killmail_time'])]['kills'] += 1
+        stats[_get_timezone(killmail['killmail_time'])]['attackers'] += len(killmail['attackers'])
         if db.killed_on_gate(killmail) and not(db.used_capital(killmail['attackers'], pilot_id)) and not(db.used_blops(killmail['attackers'], pilot_id)):
             stats['boy_scout'] += 1
 
         for attacker in killmail['attackers']:
             attacker_id = attacker.get('character_id')
             if attacker_id == pilot_id:
-                stats['top_ships'] = add_to_dict(stats['top_ships'], attacker.get('ship_type_id'))
+                stats['top_ships'] = _add_to_dict(stats['top_ships'], attacker.get('ship_type_id'))
                 if len(killmail['attackers']) > 9:
-                    stats['top_10_ships'] = add_to_dict(stats['top_10_ships'], attacker.get('ship_type_id'))
+                    stats['top_10_ships'] = _add_to_dict(stats['top_10_ships'], attacker.get('ship_type_id'))
                 else:
-                    stats['top_gang_ships'] = add_to_dict(stats['top_gang_ships'], attacker.get('ship_type_id'))
+                    stats['top_gang_ships'] = _add_to_dict(stats['top_gang_ships'], attacker.get('ship_type_id'))
             else:
-                stats['buttbuddies'] = add_to_dict(stats['buttbuddies'], attacker_id)
+                stats['buttbuddies'] = _add_to_dict(stats['buttbuddies'], attacker_id)
         if db.used_cyno(killmail['attackers'], pilot_id):
             stats['cyno'] += 1
         if db.used_capital(killmail['attackers'], pilot_id):
@@ -248,112 +298,28 @@ async def get_kill_data(pilot_name, db):
                                               round(stats[timezone]['kills'] / (stats['processed_killmails'] + 0.01) * 100),
                                               stats['average_pilots']
                                               )
-    stats['top_regions'] = ', '.join(r for r in get_top_three(stats['top_regions']) if r is not None)
-    stats['top_ships'] = ', '.join(s for s in [db.get_ship_name(i) for i in get_top_three(stats['top_ships'])] if s is not None)
-    stats['top_10_ships'] = ', '.join(s for s in [db.get_ship_name(i) for i in get_top_three(stats['top_10_ships'])] if s is not None)
-    stats['top_gang_ships'] = ', '.join(s for s in [db.get_ship_name(i) for i in get_top_three(stats['top_gang_ships'])] if s is not None)
+    stats['top_regions'] = ', '.join(r for r in _get_top_three(stats['top_regions']) if r is not None)
+    stats['top_ships'] = ', '.join(s for s in [db.get_ship_name(i) for i in _get_top_three(stats['top_ships'])] if s is not None)
+    stats['top_10_ships'] = ', '.join(s for s in [db.get_ship_name(i) for i in _get_top_three(stats['top_10_ships'])] if s is not None)
+    stats['top_gang_ships'] = ', '.join(s for s in [db.get_ship_name(i) for i in _get_top_three(stats['top_gang_ships'])] if s is not None)
     stats['cyno'] = stats['cyno'] / (stats['processed_killmails'] + 0.01)
     stats['capital_use'] = stats['capital_use'] / (stats['processed_killmails'] + 0.01)
     stats['blops_use'] = stats['blops_use'] / (stats['processed_killmails'] + 0.01)
     stats['roleplaying_dock_workers'] = stats['roleplaying_dock_workers'] / (stats['processed_killmails'] + 0.01)
     if stats['blops_use'] > config.BLOPS_HL_PERCENTAGE:
-        stats['warning'] = add_string(stats['warning'], 'BLOPS')
+        stats['warning'] = _add_string(stats['warning'], 'BLOPS')
     if stats['cyno'] > config.CYNO_HL_PERCENTAGE:
-        stats['warning'] = add_string(stats['warning'], 'CYNO')
+        stats['warning'] = _add_string(stats['warning'], 'CYNO')
     if stats['super'] > 0:
-        stats['warning'] = add_string(stats['warning'], 'SUPER')
+        stats['warning'] = _add_string(stats['warning'], 'SUPER')
     if stats['titan'] > 0:
-        stats['warning'] = add_string(stats['warning'], 'TITAN')
+        stats['warning'] = _add_string(stats['warning'], 'TITAN')
     if stats['roleplaying_dock_workers'] > config.SB_HL_PERCENTAGE:
-        stats['warning'] = add_string(stats['warning'], 'SMARTBOMB')
+        stats['warning'] = _add_string(stats['warning'], 'SMARTBOMB')
     return stats
 
 
-def add_string(o, n):
-    if o == '':
-        return n
-    return '{} + {}'.format(o, n)
-
-
-def fetch_local(killmail_id):
-    try:
-        with open(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(killmail_id)), 'r') as json_file:
-            return json.load(json_file)
-    except FileNotFoundError:
-        return None
-
-
-async def process(data):
-    """
-    :param data: zkill data
-    :return: None
-    """
-    if not os.path.exists(os.path.join(config.PREF_PATH, 'kills/')):
-        os.makedirs(os.path.join(config.PREF_PATH, 'kills/'))
-
-    result_killmails = []
-
-    for zkill in data:
-        r = fetch_local(zkill['killmail_id'])
-        if r:
-            new_dict = {}
-            for k in zkill:
-                new_dict[k] = zkill[k]
-            for k in r:
-                new_dict[k] = r[k]
-            result_killmails.append(new_dict)
-    data[:] = [z for z in data if z['killmail_id'] not in [d['killmail_id'] for d in result_killmails]]
-    Logger.info('Got {} killmails from local cache.'.format(len(result_killmails)))
-
-    ccp_kills = []
-    if len(data) > 0:
-        statusmsg.push_status('Gathering {} killmails from CCP servers.'.format(len(data)))
-        Logger.info('Gathering {} killmails from CCP servers.'.format(len(data)))
-        start_time = time.time()
-        async with ClientSession() as session:
-            for d in data:
-                att = asyncio.ensure_future(fetch(d, session))
-                ccp_kills.append(att)
-
-            results = await asyncio.gather(*ccp_kills)
-        statusmsg.push_status('Gathered {} killmails from CCP servers in {} seconds'.format(len(data), round(time.time() - start_time, 2)))
-        Logger.info('Gathered {} killmails from CCP servers in {} seconds'.format(len(data), round(time.time() - start_time, 2)))
-
-        results = [json.loads(kill) for kill in results]
-
-        for zkill in data:
-            for ccpkill in results:
-                if zkill['killmail_id'] == ccpkill['killmail_id']:
-                    new_dict = {}
-                    for k in zkill:
-                        new_dict[k] = zkill[k]
-                    for k in ccpkill:
-                        new_dict[k] = ccpkill[k]
-                    result_killmails.append(new_dict)
-    return result_killmails
-
-
-async def fetch(d, session):
-    """
-    :param d:
-    :param session:
-    :return: json response parsed into dictionary
-    """
-
-    url = "https://esi.evetech.net/v1/killmails/{}/{}/?datasource=tranquility".format(d['killmail_id'], d['zkb']['hash'])
-    while True:
-        try:
-            async with session.get(url) as response:
-                r = await response.read()
-                with open(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(d['killmail_id'])), 'w') as file:
-                    json.dump(json.loads(r), file)
-                return r
-        except Exception as e:
-            Logger.error(e)
-            await asyncio.sleep(0.25)
-
-
-def add_to_dict(dict, key):
+def _add_to_dict(dict, key):
     try:
         if dict.get(key):
             dict[key] += 1
@@ -364,7 +330,7 @@ def add_to_dict(dict, key):
     return dict
 
 
-def get_timezone(time):
+def _get_timezone(time):
     time = time.split('T')[1].split(':')
     if int(time[0]) < 6:
         return 'ustz'
@@ -373,7 +339,7 @@ def get_timezone(time):
     return 'eutz'
 
 
-def get_top_three(d):
+def _get_top_three(d):
     try:
         categories = list(d.keys())
         sorted_categories = [categories[0]]
@@ -389,3 +355,9 @@ def get_top_three(d):
         return sorted_categories[:3]
     except:
         return ['', '', '']
+
+
+def _add_string(o, n):
+    if o == '':
+        return n
+    return '{} + {}'.format(o, n)

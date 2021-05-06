@@ -444,21 +444,16 @@ class eveDB:
         resp = requests.get(url, headers=headers)
         open(os.path.join(config.PREF_PATH, file), 'wb').write(resp.content)
 
-    async def get_pilot_id(self, name):
-        try:
-            self.local_c.execute("""select char_id, last_update from characters where char_name = "{}" """.format(name))
-            r = self.local_c.fetchone()
-        except:
-            Logger.warning('get_pilot_id({}) failed first query.'.format(name))
-            r = None
+    async def get_pilot_id(self, pilot_name):
+        self.local_c.execute("select char_id, last_update from characters where char_name = ?", (pilot_name, ))
+        r = self.local_c.fetchone()
         if r is not None:
-            Logger.debug('get_pilot_id({}) returned {}.'.format(name, r))
             if datetime.datetime.now() > (r[1] + datetime.timedelta(days=7)):
-                self.local_c.execute("""delete from characters where char_name = ?""", name)
+                self.local_c.execute("delete from characters where char_name = ?", (pilot_name, ))
             else:
-                return r[0]
+                return {'pilot_id': r[0], 'pilot_name': pilot_name}
 
-        url = 'https://esi.evetech.net/latest/search/?categories=character&strict=true&search="{}"'.format(name.replace(' ', '%20'))
+        url = 'https://esi.evetech.net/latest/search/?categories=character&strict=true&search="{}"'.format(pilot_name.replace(' ', '%20'))
         headers = {'User-Agent': 'HawkEye, Author: Kain Tarr'}
         start_time = time.time()
         async with ClientSession() as session:
@@ -471,69 +466,108 @@ class eveDB:
                         Logger.warning(resp)
                         Logger.warning(e)
                         time.sleep(0.25)
-        Logger.info('Requested {} and got it in {} seconds'.format(url, round(time.time() - start_time, 3)))
+        Logger.info('Requested {} and got it in {} seconds'.format(url, round(time.time() - start_time, 2)))
         try:
-            sql = """insert into characters (char_id, char_name, last_update) values (?, ?, ?)"""
-            self.local_c.execute(sql, (r['character'][0], name, datetime.datetime.now()))
+            sql = "insert into characters (char_id, char_name, last_update) values (?, ?, ?)"
+            self.local_c.execute(sql, (r['character'][0], pilot_name, datetime.datetime.now()))
             self.local_db.commit()
-            return r['character'][0]
+            return {'pilot_id': r['character'][0], 'pilot_name': pilot_name}
         except KeyError:
             return None
 
-    def get_char_affiliations(self, char_ids):
-        self.local_c.execute("""select char_id, corp_id, alliance_id, last_update from characters where char_id in ({})""".format(','.join(['?'] * len(char_ids))), char_ids)
-        r = self.local_c.fetchall()
-        results = [{'character_id': d[0], 'corporation_id': d[1], 'alliance_id': d[2]} for d in r]
-        if len(results) == len(char_ids):
-            if None not in [d['corporation_id'] for d in results]:
-                return results
+    def get_pilot_affiliations(self, pilot_map):
+        for pilot in pilot_map:
+            for key in ['corp_id', 'corp_name', 'alliance_id', 'alliance_name']:
+                pilot[key] = None
+        cols = ['char_id', 'corp_id', 'alliance_id']
+        # Update pilot_map with corp_id and alliance_id from database
+        self.local_c.execute("select {} from characters where char_id in ({})".format(', '.join(cols), ', '.join(['?'] * len(pilot_map))), [p['pilot_id'] for p in pilot_map])
+        results = self.local_c.fetchall()
+        for pilot in pilot_map:
+            for r in results:
+                if pilot['pilot_id'] == r[0]:
+                    pilot['corp_id'] = r[1]
+                    pilot['alliance_id'] = r[2]
 
-        statusmsg.push_status("Retrieving character affiliation IDs...")
-        try:
-            affiliations = post_req_ccp("characters/affiliation/", json.dumps(tuple(char_ids)))
+        # If none of our pilots is missing corp_id, they were all up-to-date in the database, and we can return results
+        # after adding corporation names and alliance names from _add_corpall_names
+        if None not in [r['corp_id'] for r in pilot_map]:
+            return self._add_corpall_names(pilot_map)
+
+        # Determine which characters were not up-to-date in the database by checking where corp_id is missing
+        pilots_not_in_db = [p for p in pilot_map if p.get('corp_id') is None]
+        # Reset our pilot_map to exclude characters with missing corp_id
+        pilot_map = [p for p in pilot_map if p.get('corp_id') is not None]
+
+        while True:
+            try:
+                affiliations = post_req_ccp("characters/affiliation/", json.dumps(tuple(p['pilot_id'] for p in pilots_not_in_db)))
+                break
+            except Exception as e:
+                Logger.warning(e)
+                time.sleep(0.25)
+
+        for pilot in pilots_not_in_db:
             for mapping in affiliations:
-                sql = "update characters set corp_id = ?, alliance_id = ?, last_update = ? where char_id = ?"
-                self.local_c.execute(sql, (mapping['corporation_id'],
-                                           mapping.get('alliance_id'),
-                                           datetime.datetime.now(),
-                                           mapping['character_id']))
-                self.local_db.commit()
-        except:
-            Logger.info("Failed to obtain character affiliations.", exc_info=True)
-            raise Exception
+                if pilot['pilot_id'] == mapping['character_id']:
+                    # Enrich pilot with corp_id and alliance_id from CCP for pilots not in database
+                    pilot['corp_id'] = mapping['corporation_id']
+                    pilot['alliance_id'] = mapping.get('alliance_id')
+                    # Insert pilot data into characters
+                    sql = "insert into characters ({}, last_update) values (?, ?, ?, ?)".format(', '.join(cols))
+                    self.local_c.execute(sql, (mapping['character_id'],
+                                               mapping['corporation_id'],
+                                               mapping.get('alliance_id'),
+                                               datetime.datetime.now()))
+                    self.local_db.commit()
+            # Pilot data is enriched with corp_id and alliance_id, add it back to pilot_map
+            pilot_map.append(pilot)
+        return self._add_corpall_names(pilot_map)
 
-        return affiliations
+    def _add_corpall_names(self, pilot_map):
+        corpall_ids = []
+        for pilot in pilot_map:
+            for key in ['corp_id', 'alliance_id']:
+                if pilot[key] is not None:
+                    corpall_ids.append(pilot[key])
+        affiliation_names = self._get_affil_names(corpall_ids)
 
-    def get_affil_names(self, allcorp_ids):
+        # Add corp and alliance names to affiliations using _get_affil_names mapping results
+        for pilot in pilot_map:
+            for d in affiliation_names:
+                if pilot['corp_id'] == d['id']:
+                    pilot['corp_name'] = d['name']
+                if pilot['alliance_id'] == d['id']:
+                    pilot['alliance_name'] = d['name']
+
+        return pilot_map
+
+    def _get_affil_names(self, allcorp_ids):
         allcorp_ids = [i for i in allcorp_ids if i]
         return_values = []
-        self.local_c.execute("""select entity_id, entity_name, last_update from allcorp where entity_id in ({})""".format(','.join(['?'] * len(allcorp_ids))), allcorp_ids)
+        self.local_c.execute("select entity_id, entity_name, last_update from allcorp where entity_id in ({})".format(','.join(['?'] * len(allcorp_ids))), allcorp_ids)
         records = self.local_c.fetchall()
         if records is not None:
-            Logger.debug('get_affil_names({}) returned {}.'.format(allcorp_ids, records))
             for r in records:
-                if datetime.datetime.now() > (r[2] + datetime.timedelta(days=7)):
-                    self.local_c.execute("""delete from allcorp where entity_id = {}""".format(r[0]))
-                else:
-                    return_values.append({'id': r[0], 'name': r[1]})
+                return_values.append({'id': r[0], 'name': r[1]})
             allcorp_ids = list(set(allcorp_ids).difference([d['id'] for d in return_values]))
             if len(allcorp_ids) == 0:
                 return return_values
 
-        statusmsg.push_status("Obtaining corporation and alliance names and zKillboard data...")
-        try:
-            names = post_req_ccp("universe/names/", json.dumps(tuple(allcorp_ids)))
-        except:
-            Logger.info("Failed request corporation and alliance names.", exc_info=True)
-            raise Exception
+        while True:
+            try:
+                names = post_req_ccp("universe/names/", json.dumps(tuple(allcorp_ids)))
+                break
+            except Exception as e:
+                Logger.warning(e)
+                time.sleep(0.25)
 
-        records = []
         for r in names:
-            records.append({'id': r['id'], 'name': r['name']})
-            sql = """insert into allcorp (entity_id, entity_name, last_update) values (?, ?, ?)"""
+            return_values.append({'id': r['id'], 'name': r['name']})
+            sql = "insert into allcorp (entity_id, entity_name, last_update) values (?, ?, ?)"
             self.local_c.execute(sql, (r['id'], r['name'], datetime.datetime.now()))
             self.local_db.commit()
-        return records
+        return return_values
 
     async def get_char_name(self, id):
         if id == '':
@@ -578,6 +612,7 @@ def clear_characters():
                          )
     c = db.cursor()
     c.execute("""delete from characters""")
+    c.execute("""delete from entities""")
     db.commit()
     db.close()
 
