@@ -276,16 +276,6 @@ async def process(data, db):
             results = await asyncio.gather(*result_killmails)
         Logger.info('Gathered {} killmails from CCP servers in {} seconds'.format(len(data), time.time() - start_time))
 
-    """for j in json_results:
-        Logger.debug('Parsing {}'.format(j))
-        try:
-            if not os.path.exists(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(str(j['killmail_id'])))):
-                with open(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(str(j['killmail_id']))), 'w') as file:
-                    json.dump(j, file)
-        except:
-            Logger.error('Could not get killmail_id from {}'.format(j))
-            json_results.remove(j)"""
-
     merged_kills = []
     for zkill in data:
         for ccpkill in results:
@@ -306,20 +296,13 @@ async def fetch(d, session, db):
     :return: json response parsed into dictionary
     """
 
-    """try:
-        with open(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(str(d['killmail_id']))), 'r') as json_file:
-            return json.load(json_file)
-    except:
-        pass
-        # Logger.info('Failed to open {}.json'.format(str(d['killmail_id'])))"""
-
     url = "https://esi.evetech.net/v1/killmails/{}/{}/?datasource=tranquility".format(d['killmail_id'], d['zkb']['hash'])
     while True:
         try:
             async with session.get(url) as response:
                 r = await response.read()
                 s = json.loads(r)
-                db.store_killmail(s)
+                await db.store_killmail(s)
                 return s
         except Exception as e:
             Logger.error(e)

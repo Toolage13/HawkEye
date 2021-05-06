@@ -1,4 +1,6 @@
 from aiohttp import ClientSession
+import aiosqlite
+import asyncio
 import config
 import csv
 import datetime
@@ -23,6 +25,7 @@ class eveDB:
         Logger.info('Creating eveDB object...')
         self.connection = sqlite3.connect(":memory:", check_same_thread=False)
         self.cursor = self.connection.cursor()
+        self.load_tables()
 
         self.blops = None
         self.capital_ships = None
@@ -39,8 +42,6 @@ class eveDB:
         self.smartbomb_ids = None
         self.super = None
         self.titan = None
-        self.load_tables()
-        Logger.info('eveDB object created...')
 
         self.local_db = sqlite3.connect(os.path.join(config.PREF_PATH, 'characters.db'),
                                         check_same_thread=False,
@@ -48,12 +49,21 @@ class eveDB:
         self.local_c = self.local_db.cursor()
         self.prepare_local_db()
 
+        self.local_km = aiosqlite.connect(os.path.join(config.PREF_PATH, 'killmails.db'))
+        self.local_ckm = self.local_km.cursor()
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(self.prepare_local_km())
+        loop.close()
+
+        Logger.info('eveDB object created...')
+
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.connection.close()
         self.local_db.close()
+        self.local_km.close()
 
     def load_tables(self):
         with open(os.path.join(config.PREF_PATH, 'invTypes.csv'), encoding='utf8') as file:
@@ -258,40 +268,44 @@ class eveDB:
                                 entity_name str,
                                 last_update timestamp)""")
 
-        self.local_c.execute("""create table if not exists killmails(
-                                killmail_id int,
-                                killmail_time str,
-                                solar_system_id int)""")
+    async def prepare_local_km(self):
+        await self.local_ckm.execute("""create table if not exists killmails(
+                                        killmail_id int,
+                                        killmail_time str,
+                                        solar_system_id int)""")
 
-        self.local_c.execute("""create table if not exists victims(
-                                killmail_id int,
-                                alliance_id int,
-                                character_id int,
-                                corporation_id int,
-                                damage_taken int,
-                                ship_type_id int)""")
+        await self.local_ckm.execute("""create table if not exists victims(
+                                        killmail_id int,
+                                        alliance_id int,
+                                        character_id int,
+                                        corporation_id int,
+                                        damage_taken int,
+                                        ship_type_id int)""")
 
-        self.local_c.execute("""create table if not exists items(
-                                killmail_id int,
-                                flag int,
-                                item_type_id int,
-                                quantity_destroyed int,
-                                singleton int)""")
+        await self.local_ckm.execute("""create table if not exists items(
+                                        killmail_id int,
+                                        flag int,
+                                        item_type_id int,
+                                        quantity_destroyed int,
+                                        quantity_dropped int,
+                                        singleton int)""")
 
-        self.local_c.execute("""create table if not exists position(
-                                killmail_id int,
-                                x real,
-                                y real,
-                                z real)""")
-        self.local_c.execute("""create table if not exists attackers(
-                                killmail_id int,
-                                alliance_id int,
-                                character_id int,
-                                damage_done int,
-                                final_blow boolean,
-                                security_status real,
-                                ship_type int,
-                                weapon_type_id int)""")
+        await self.local_ckm.execute("""create table if not exists position(
+                                        killmail_id int,
+                                        x real,
+                                        y real,
+                                        z real)""")
+
+        await self.local_ckm.execute("""create table if not exists attackers(
+                                        killmail_id int,
+                                        alliance_id int,
+                                        character_id int,
+                                        corporation_id int,
+                                        damage_done int,
+                                        final_blow boolean,
+                                        security_status real,
+                                        ship_type int,
+                                        weapon_type_id int)""")
 
     def get_region(self, region_id):
         return self.map_regions[self.map_solar_systems[region_id]['regionID']]
@@ -604,25 +618,39 @@ class eveDB:
         self.local_c.execute("""select char_id, char_name, corp_id, alliance_id from characters where char_name in ({})""".format(','.join(['?'] * len(char_names))), char_names)
         return [{'char_id': r[0], 'char_name': r[1], 'corp_id': r[2], 'alliance_id': r[3]} for r in self.local_c.fetchall()]
 
-    def insert_sql(self, table, columns, values):
+    async def insert_sql(self, table, columns, values):
         sql = """insert into {} (killmail_id, {}) values ({})""".format(table, ', '.join(columns), ','.join('?'*len(values)))
-        self.local_c.execute(sql, tuple(values))
-        self.local_db.commit()
+        await self.local_ckm.execute(sql, tuple(values))
+        await self.local_km.commit()
 
-    def store_killmail(self, json_data):
+    async def store_killmail(self, json_data):
         k = tuple([json_data['killmail_id']])
         m = ['killmail_time', 'solar_system_id']
         t = k + tuple([json_data[i] for i in m])
-        self.insert_sql('killmails', m, t)
+        await self.insert_sql('killmails', m, t)
+
         m = ['alliance_id', 'character_id', 'corporation_id', 'damage_taken', 'ship_type_id']
         t = k + tuple([json_data['victim'].get(i) for i in m])
-        self.insert_sql('victims', m, t)
-        Logger.info('Killmail stored.')
+        await self.insert_sql('victims', m, t)
 
-    def get_killmail(self, killmail_id):
+        m = ['flag', 'item_type_id', 'quantity_destroyed', 'quantity_dropped', 'singleton']
+        for i in json_data['victim']['items']:
+            t = k + tuple([i.get(x) for x in m])
+            await self.insert_sql('items', m, t)
+
+        m = ['x', 'y', 'z']
+        t = k + tuple([json_data['victim']['position'].get(i) for i in m])
+        await self.insert_sql('position', m, t)
+
+        m = ['alliance_id', 'character_id', 'corporation_id', 'damage_done', 'final_blow', 'security_status', 'ship_type', 'weapon_type_id']
+        for i in json_data['attackers']:
+            t = k + tuple([i.get(x) for x in m])
+            await self.insert_sql('attackers', m, t)
+
+    async def get_killmail(self, killmail_id):
         d = {}
-        self.local_c.execute("""select killmail_time, solar_system_id from killmails where killmail_id = ?""", (killmail_id, ))
-        r = self.local_c.fetchone()
+        self.local_ckm.execute("select killmail_time, solar_system_id from killmails where killmail_id = ?", (killmail_id, ))
+        r = self.local_ckm.fetchone()
         if not r:
             return None
         d['killmail_id'] = killmail_id
@@ -630,20 +658,50 @@ class eveDB:
         d['solar_system_id'] = r[1]
 
         m = ['alliance_id', 'character_id', 'corporation_id', 'damage_taken', 'ship_type_id']
-        self.local_c.execute("""select {} from victims where killmail_id = ?""".format(', '.join(m)), (killmail_id, ))
-        r = self.local_c.fetchone()
+        self.local_ckm.execute("select {} from victims where killmail_id = ?".format(', '.join(m)), (killmail_id, ))
+        r = self.local_ckm.fetchone()
         victim = {}
         for i in m:
             victim[i] = r[m.index(i)]
         d['victim'] = victim
-        Logger.info(d)
-        return None
+
+        m = ['flag', 'item_type_id', 'quantity_destroyed', 'quantity_dropped', 'singleton']
+        self.local_ckm.execute("select {} from items where killmail_id = ?".format(', '.join(m)), (killmail_id, ))
+        r = self.local_ckm.fetchall()
+        items = []
+        for item in r:
+            new_dict = {}
+            for col in m:
+                new_dict[col] = item[m.index(col)]
+            items.append(new_dict)
+        d['victim']['items'] = items
+
+        m = ['x', 'y', 'z']
+        self.local_ckm.execute("select {} from position where killmail_id = ?".format(', '.join(m)), (killmail_id, ))
+        r = self.local_ckm.fetchone()
+        position = {}
+        for i in m:
+            position[i] = r[m.index(i)]
+        d['victim']['position'] = position
+
+        m = ['alliance_id', 'character_id', 'corporation_id', 'damage_done', 'final_blow', 'security_status', 'ship_type', 'weapon_type_id']
+        self.local_ckm.execute("select {} from attackers where killmail_id = ?".format(', '.join(m)), (killmail_id, ))
+        r = self.local_ckm.fetchall()
+        attackers = []
+        for att in r:
+            new_dict = {}
+            for col in m:
+                new_dict[col] = att[m.index(col)]
+            attackers.append(new_dict)
+        d['attackers'] = attackers
+
+        return d
 
 
 def clear_characters():
-    db = sqlite3.connect(os.path.join(config.PREF_PATH, 'characters.db'),
+    db = aiosqlite.connect(os.path.join(config.PREF_PATH, 'characters.db'),
                          check_same_thread=False,
-                         detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
+                         detect_types=aiosqlite.PARSE_DECLTYPES | aiosqlite.PARSE_COLNAMES
                          )
     c = db.cursor()
     c.execute("""delete from characters""")
