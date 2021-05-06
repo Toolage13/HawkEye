@@ -54,18 +54,11 @@ elif __file__:
 LOG_FILE = os.path.join(LOG_PATH, "hawkeye.log")
 GUI_CFG_FILE = os.path.join(PREF_PATH, "hawkeye.cfg")
 OPTIONS_FILE = os.path.join(PREF_PATH, "hawkeye.pickle")
-DB_FILE = os.path.join(PREF_PATH, "hawkeye.sqlite3")
 
-# Persisten options object
+# Persistent options object
 OPTIONS_OBJECT = optstore.PersistentOptions(OPTIONS_FILE)
 
-# Clean up old GUI_CFG_FILES and OPTIONS_OBJECT keys
-if os.path.isfile(GUI_CFG_FILE) and not os.path.isfile(OPTIONS_FILE):
-    try:
-        os.remove(GUI_CFG_FILE)
-    except:
-        pass
-if OPTIONS_OBJECT.Get("version", 0) != __version__:
+"""if OPTIONS_OBJECT.Get("version", 0) != __version__:
     print("Config file erased.")
     try:
         os.remove(GUI_CFG_FILE)
@@ -73,7 +66,7 @@ if OPTIONS_OBJECT.Get("version", 0) != __version__:
         pass
     for key in OPTIONS_OBJECT.ListKeys():
         if key != "uuid":
-            OPTIONS_OBJECT.Del(key)
+            OPTIONS_OBJECT.Del(key)"""
 
 # Store version information
 OPTIONS_OBJECT.Set("version", __version__)

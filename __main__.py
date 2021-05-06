@@ -1,4 +1,5 @@
 import analyze
+import config
 from eveDB import eveDB
 import gui
 import logging
@@ -44,6 +45,7 @@ def analyze_chars(char_names, db):
     start_time = time.time()
     wx.CallAfter(app.PySpy.grid.ClearGrid)
     try:
+        statusmsg.push_status('About to run analyze.main()...')
         outlist, filtered = analyze.main(char_names, db)
         duration = round(time.time() - start_time, 1)
         if outlist is not None:
@@ -64,6 +66,7 @@ def analyze_chars(char_names, db):
         )
 
 
+config.OPTIONS_OBJECT.Set("ignoredList", [])
 app = gui.App(0)
 background_thread = threading.Thread(target=watch_clpbd, daemon=True)
 background_thread.start()
