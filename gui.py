@@ -37,7 +37,7 @@ class Frame(wx.Frame):
             [2, "Character", wx.ALIGN_LEFT, 80, False, True, "Character", 'name'],
             [3, "Corporation", wx.ALIGN_LEFT, 80, True, True, "Corporation", 'corp_name'],
             [4, "Alliance", wx.ALIGN_LEFT, 80, True, True, "Alliance", 'alliance_name'],
-            [5, "Cyno", wx.ALIGN_LEFT, 80, True, True, "Cyno", 'cyno'],
+            [5, "Cyno", wx.ALIGN_LEFT, 80, True, True, "Cyno Use", 'cyno'],
             [6, "Avg. Gang", wx.ALIGN_LEFT, 80, True, True, "Average Gang", 'average_pilots'],
             [7, "Avg. Fleet", wx.ALIGN_LEFT, 80, True, True, "Average Fleet Size", 'avg_10'],
             [8, "Timezone", wx.ALIGN_LEFT, 80, True, True, "Timezone", "timezone"],
@@ -47,8 +47,8 @@ class Frame(wx.Frame):
             [12, "Gate Kills", wx.ALIGN_LEFT, 80, True, True, "Gatecamping", 'boy_scout'],
             [13, "Super", wx.ALIGN_LEFT, 40, True, True, "Super Kills", 'super'],
             [14, "Titan", wx.ALIGN_LEFT, 40, True, True, "Titan Kills", 'titan'],
-            [15, "Capital Use", wx.ALIGN_LEFT, 80, True, True, "Capital Use", 'capital_use'],
-            [16, "Blops Use", wx.ALIGN_LEFT, 80, True, True, "Blops Use", 'blops_use'],
+            [15, "Capital", wx.ALIGN_LEFT, 80, True, True, "Capital Use", 'capital_use'],
+            [16, "Blops", wx.ALIGN_LEFT, 80, True, True, "Blops Use", 'blops_use'],
             [17, "Top Regions", wx.ALIGN_LEFT, 80, True, True, "Top Regions", 'top_regions'],
             [18, "", None, 1, False, True, "", 1]  # Need for _stretchLastCol()
             )
@@ -80,19 +80,19 @@ class Frame(wx.Frame):
         self.hl_sub = wx.Menu()
         self.view_menu.Append(wx.ID_ANY, "Highlighting", self.hl_sub)
 
-        self.hl_blops = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&Blops Kills")
+        self.hl_blops = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&Blops Use")
         self.hl_sub.Bind(wx.EVT_MENU, self._toggleHighlighting, self.hl_blops)
         self.hl_blops.Check(self.options.Get("HlBlops", True))
 
-        self.hl_cyno = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&Cyno Characters")
+        self.hl_cyno = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&Cyno Use")
         self.hl_sub.Bind(wx.EVT_MENU, self._toggleHighlighting, self.hl_cyno)
         self.hl_cyno.Check(self.options.Get("HlCyno", True))
 
-        self.hl_super = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&Super Kills")
+        self.hl_super = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&Super Use")
         self.hl_sub.Bind(wx.EVT_MENU, self._toggleHighlighting, self.hl_super)
         self.hl_super.Check(self.options.Get("HlSuper", True))
 
-        self.hl_titan = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&Titan Kills")
+        self.hl_titan = self.hl_sub.AppendCheckItem(wx.ID_ANY, "&Titan Use")
         self.hl_sub.Bind(wx.EVT_MENU, self._toggleHighlighting, self.hl_titan)
         self.hl_titan.Check(self.options.Get("HlTitan", True))
 

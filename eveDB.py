@@ -427,10 +427,10 @@ class eveDB:
 
     def get_ship_name(self, id):
         try:
-            self.cursor.execute("""select typeName from invTypes where typeID = {} """.format(id))
+            self.cursor.execute("""select typeName from invTypes where typeID = {}""".format(id))
         except:
             Logger.debug('Failed to run {} through get_ship_name()'.format(id))
-            return 'UNKNOWN'
+            return None
         return self.cursor.fetchone()[0]
 
     def get_location(self, id):

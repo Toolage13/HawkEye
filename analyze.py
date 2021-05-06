@@ -110,10 +110,10 @@ async def get_kill_data(pilot_name, db):
         'super': 0,
         'timezone': 'N/A',
         'titan': 0,
-        'top_10_ships': {},
-        'top_gang_ships': {},
-        'top_regions': {},
-        'top_ships': {},
+        'top_10_ships': None,
+        'top_gang_ships': None,
+        'top_regions': None,
+        'top_ships': None,
         'trash_can_resident': 0,
         'ustz': {'kills': 0.01, 'attackers': 0},
         'vietcong': 0,
@@ -220,10 +220,10 @@ async def get_kill_data(pilot_name, db):
                                               round(stats[timezone]['kills'] / (stats['processed_killmails'] + 0.01) * 100),
                                               stats['average_pilots']
                                               )
-    stats['top_regions'] = ', '.join(get_top_three(stats['top_regions']))
-    stats['top_ships'] = ', '.join(db.get_ship_name(i) for i in get_top_three(stats['top_ships']))
-    stats['top_10_ships'] = ', '.join(db.get_ship_name(i) for i in get_top_three(stats['top_10_ships']))
-    stats['top_gang_ships'] = ', '.join(db.get_ship_name(i) for i in get_top_three(stats['top_gang_ships']))
+    stats['top_regions'] = ', '.join(r for r in get_top_three(stats['top_regions']) if r is not None)
+    stats['top_ships'] = ', '.join([s for s in [db.get_ship_name(i) for i in get_top_three(stats['top_ships'])] if s is not None])
+    stats['top_10_ships'] = ', '.join([s for s in [db.get_ship_name(i) for i in get_top_three(stats['top_10_ships'])] if s is not None])
+    stats['top_gang_ships'] = ', '.join([s for s in [db.get_ship_name(i) for i in get_top_three(stats['top_gang_ships'])] if s is not None])
     stats['cyno'] = stats['cyno'] / (stats['processed_killmails'] + 0.01)
     stats['capital_use'] = stats['capital_use'] / (stats['processed_killmails'] + 0.01)
     stats['blops_use'] = stats['blops_use'] / (stats['processed_killmails'] + 0.01)
@@ -326,10 +326,13 @@ async def fetch(d, session):
 
 
 def add_to_dict(dict, key):
-    if dict.get(key):
-        dict[key] += 1
-    else:
-        dict[key] = 1
+    try:
+        if dict.get(key):
+            dict[key] += 1
+        else:
+            dict[key] = 1
+    except AttributeError:
+        return {key: 1}
 
 
 def get_timezone(time):
