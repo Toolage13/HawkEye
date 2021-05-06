@@ -369,7 +369,7 @@ class Frame(wx.Frame):
         for r in outlist:
             ignore = False
             for rec in ignored_list:
-                if r['id'] == rec[0] or r['corp_id'] == rec[0] or r['alliance_id'] == rec[0]:
+                if r['pilot_id'] == rec[0] or r['corp_id'] == rec[0] or r['alliance_id'] == rec[0]:
                     ignore = True
             if ignore:
                 self.grid.HideRow(rowidx)
@@ -419,7 +419,7 @@ class Frame(wx.Frame):
                     color = True
 
                 for entry in highlighted_list:  # Highlight chars from highlight list
-                    if self.options.Get("HlList", True) and (entry[0] == r['id'] or entry[0] == r['corp_id'] or entry[0] == r['alliance_id']):
+                    if self.options.Get("HlList", True) and (entry[0] == r['pilot_id'] or entry[0] == r['corp_id'] or entry[0] == r['alliance_id']):
                         self.grid.SetCellTextColour(rowidx, colidx, self.hl3_colour)
                         color = True
 
@@ -447,7 +447,7 @@ class Frame(wx.Frame):
         :param event: Required
         """
         rowidx = event.GetRow()
-        character_id = self.options.Get("outlist")[rowidx]['id']
+        character_id = self.options.Get("outlist")[rowidx]['pilot_id']
         url = "https://zkillboard.com/character/{}/".format(str(character_id))
 
         webbrowser.open_new_tab(url)
@@ -481,7 +481,7 @@ class Frame(wx.Frame):
 
         highlighted_list = self.options.Get("highlightedList", default=[])
         rowidx = event.GetRow()
-        character_id = str(self.options.Get("outlist")[rowidx]['id'])
+        character_id = str(self.options.Get("outlist")[rowidx]['pilot_id'])
         # Only open context menu character item right clicked, not empty line.
         if len(character_id) > 0:
             outlist = self.options.Get("outlist")
@@ -528,7 +528,7 @@ class Frame(wx.Frame):
             hl_alliance = False
 
             for entry in highlighted_list:
-                if entry[0] == self.options.Get("outlist")[rowidx]['id']:
+                if entry[0] == self.options.Get("outlist")[rowidx]['pilot_id']:
                     hl_char = True
                 if entry[0] == self.options.Get("outlist")[rowidx]['corp_id']:
                     hl_corp = True

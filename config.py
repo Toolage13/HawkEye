@@ -77,7 +77,7 @@ if not os.path.exists(os.path.join(PREF_PATH, 'kills/')):
 
 # Various constants
 MAX_NAMES = 500  # The max number of char names to be processed
-MAX_KM = 50  # Max number of killmails to process per character
+MAX_KM = 100  # Max number of killmails to process per character
 ZKILL_MULTIPLIER = 1.5
 ZKILL_RETRY = 50
 MAX_CHUNK = 50

@@ -228,7 +228,7 @@ async def _merge_zkill_ccp_kills(data):
         start_time = time.time()
         async with ClientSession() as session:
             for d in data:
-                att = asyncio.ensure_future(_fetch(d, session))
+                att = asyncio.ensure_future(_fetch(d['killmail_id'], d['zkb']['hash'], session))
                 ccp_kills.append(att)
 
             results = await asyncio.gather(*ccp_kills)
@@ -265,14 +265,16 @@ def _fetch_local(killmail_id):
         return None
 
 
-async def _fetch(d, session):
+async def _fetch(killmail_id, hash, session):
     """
-    :param d:
-    :param session:
+    Fetch killmail from CCP servers.
+    :param killmail_id: Killmail ID
+    :param hash: Killmail hash
+    :param session: Session to use
     :return: json response parsed into dictionary
     """
 
-    url = "https://esi.evetech.net/v1/killmails/{}/{}/?datasource=tranquility".format(d['killmail_id'], d['zkb']['hash'])
+    url = "https://esi.evetech.net/v1/killmails/{}/{}/?datasource=tranquility".format(killmail_id, hash)
     while True:
             async with session.get(url) as response:
                 r = await response.read()
@@ -284,15 +286,27 @@ async def _fetch(d, session):
                 if j.get('error'):
                     await asyncio.sleep(0.25)
                     continue
-                with open(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(d['killmail_id'])), 'w') as file:
+                with open(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(killmail_id)), 'w') as file:
                     json.dump(j, file)
                 return j
 
 
 def _prepare_stats(stats, killmails, db, pilot_id):
+    """
+    Process a list of killmails stored as dictionaries, assign a lot of attributes to stats, then pass to
+    _format_stats() for final calculations.
+    :param stats: Stats dictionary to be updated
+    :param killmails: List of dictionaries containing killmails
+    :param db: EveDB to use
+    :param pilot_id: Pilot ID
+    :return: Enriched stats
+    """
     for killmail in killmails:
+        # General
         stats['processed_killmails'] += 1
-        stats['top_regions'] = _add_to_dict(stats['top_regions'], db.get_region(killmail['solar_system_id']))
+
+        # Valuations, fleet sizes, and ship types in small or large fleets
+        stats['average_kill_value'] += float(killmail['zkb']['totalValue'])
         stats['average_pilots'] += len(killmail['attackers'])
         if len(killmail['attackers']) > 9:
             stats['avg_10'] += len(killmail['attackers'])
@@ -300,13 +314,6 @@ def _prepare_stats(stats, killmails, db, pilot_id):
         else:
             stats['avg_gang'] += len(killmail['attackers'])
             stats['pro_gang'] += 1
-        stats['average_kill_value'] += float(killmail['zkb']['totalValue'])
-        stats[db.get_location(killmail['solar_system_id'])] += 1
-        stats[_get_timezone(killmail['killmail_time'])]['kills'] += 1
-        stats[_get_timezone(killmail['killmail_time'])]['attackers'] += len(killmail['attackers'])
-        if db.killed_on_gate(killmail) and not(db.used_capital(killmail['attackers'], pilot_id)) and not(db.used_blops(killmail['attackers'], pilot_id)):
-            stats['boy_scout'] += 1
-
         for attacker in killmail['attackers']:
             attacker_id = attacker.get('character_id')
             if attacker_id == pilot_id:
@@ -316,7 +323,17 @@ def _prepare_stats(stats, killmails, db, pilot_id):
                 else:
                     stats['top_gang_ships'] = _add_to_dict(stats['top_gang_ships'], attacker.get('ship_type_id'))
             else:
-                stats['buttbuddies'] = _add_to_dict(stats['buttbuddies'], attacker_id)
+                stats['buttbuddies'] = _add_to_dict(stats['buttbuddies'], attacker_id)  # Not used, but maybe someday
+
+        # Location and timezone
+        stats['top_regions'] = _add_to_dict(stats['top_regions'], db.get_region(killmail['solar_system_id']))
+        stats[db.get_location(killmail['solar_system_id'])] += 1
+        stats[_get_timezone(killmail['killmail_time'])]['kills'] += 1
+        stats[_get_timezone(killmail['killmail_time'])]['attackers'] += len(killmail['attackers'])
+
+        # Kill attributes (using certain ships etc.)
+        if db.killed_on_gate(killmail) and not(db.used_capital(killmail['attackers'], pilot_id)) and not(db.used_blops(killmail['attackers'], pilot_id)):
+            stats['boy_scout'] += 1  # Gatecamping
         if db.used_cyno(killmail['attackers'], pilot_id):
             stats['cyno'] += 1
         if db.used_capital(killmail['attackers'], pilot_id):
@@ -324,12 +341,57 @@ def _prepare_stats(stats, killmails, db, pilot_id):
         if db.used_blops(killmail['attackers'], pilot_id):
             stats['blops_use'] += 1
         if db.used_smartbomb(killmail['attackers'], pilot_id):
-            stats['smartbobm'] += 1
+            stats['smartbomb'] += 1
         if db.used_super(killmail['attackers'], pilot_id):
             stats['super'] += 1
         if db.used_titan(killmail['attackers'], pilot_id):
             stats['titan'] += 1
 
+    return _format_stats(stats, db)
+
+
+def _add_to_dict(dict, key):
+    """
+    Add 1 to a key if it exists in a dictionary, otherwise add it as a new key with value 1 to the dictionary, and
+    return the dictionary.
+    :param dict: Original dictionary
+    :param key: Key to update/add
+    :return: Return the updated dictionary
+    """
+    try:
+        if dict.get(key):
+            dict[key] += 1
+        else:
+            dict[key] = 1
+    except AttributeError:
+        return {key: 1}
+    return dict
+
+
+def _get_timezone(time):
+    """
+    Take a string timezone with CCP's weird formatting, determine timezone by the hour of the kill:
+    00:00 - 06:00 USTZ
+    06:00 - 14:00 AUTZ
+    14:00 - 00:00 EUTZ
+    :param time: Input time string
+    :return: Timezone
+    """
+    time = time.split('T')[1].split(':')
+    if int(time[0]) < 6:
+        return 'ustz'
+    if int(time[0]) < 14:
+        return 'autz'
+    return 'eutz'
+
+
+def _format_stats(stats, db):
+    """
+    Make some calculations and other formatting changes to stats being passed.
+    :param stats: Input statistics dictionary
+    :param db: EveDB to use
+    :return: Enriched stats
+    """
     stats['average_kill_value'] = stats['average_kill_value'] / (stats['processed_killmails'] + 0.01)
     stats['average_pilots'] = round(stats['average_pilots'] / (stats['processed_killmails'] + 0.01))
     stats['avg_10'] = round(stats['avg_10'] / (stats['pro_10'] + 0.01))
@@ -349,7 +411,7 @@ def _prepare_stats(stats, killmails, db, pilot_id):
     stats['cyno'] = stats['cyno'] / (stats['processed_killmails'] + 0.01)
     stats['capital_use'] = stats['capital_use'] / (stats['processed_killmails'] + 0.01)
     stats['blops_use'] = stats['blops_use'] / (stats['processed_killmails'] + 0.01)
-    stats['roleplaying_dock_workers'] = stats['roleplaying_dock_workers'] / (stats['processed_killmails'] + 0.01)
+    stats['smartbomb'] = stats['smartbomb'] / (stats['processed_killmails'] + 0.01)
     if stats['blops_use'] > config.BLOPS_HL_PERCENTAGE:
         stats['warning'] = _add_string(stats['warning'], 'BLOPS')
     if stats['cyno'] > config.CYNO_HL_PERCENTAGE:
@@ -358,32 +420,17 @@ def _prepare_stats(stats, killmails, db, pilot_id):
         stats['warning'] = _add_string(stats['warning'], 'SUPER')
     if stats['titan'] > 0:
         stats['warning'] = _add_string(stats['warning'], 'TITAN')
-    if stats['roleplaying_dock_workers'] > config.SB_HL_PERCENTAGE:
+    if stats['smartbomb'] > config.SB_HL_PERCENTAGE:
         stats['warning'] = _add_string(stats['warning'], 'SMARTBOMB')
     return stats
 
 
-def _add_to_dict(dict, key):
-    try:
-        if dict.get(key):
-            dict[key] += 1
-        else:
-            dict[key] = 1
-    except AttributeError:
-        return {key: 1}
-    return dict
-
-
-def _get_timezone(time):
-    time = time.split('T')[1].split(':')
-    if int(time[0]) < 6:
-        return 'ustz'
-    if int(time[0]) < 14:
-        return 'autz'
-    return 'eutz'
-
-
 def _get_top_three(d):
+    """
+    Return a list of the top three keys in a dictionary by comparing numeric values stored as values for each key
+    :param d: Input dictionary
+    :return: Top three sorted list if possible, otherwise list of three blank strings
+    """
     try:
         categories = list(d.keys())
         sorted_categories = [categories[0]]
