@@ -154,7 +154,7 @@ async def get_kill_data(pilot_name, db):
                     data = await resp.json()
                 break
             except Exception as e:
-                Logger.error('Failed to get kills page for {} : {}'.format(pilot_name, url))
+                Logger.error('Failed to get kills page for {} : {}'.format(pilot_name['char_name'], url))
                 retry += 1
                 await asyncio.sleep(random.random() * config.ZKILL_MULTIPLIER)
 
@@ -166,7 +166,7 @@ async def get_kill_data(pilot_name, db):
 
     Logger.info('Retrieving killmail data from CCP ESI for {}'.format(pilot_name))
     data = data[:config.MAX_KM]
-    details = await process(data)
+    details = await process(data, db)
 
     for killmail in details:
         stats['processed_killmails'] += 1
@@ -182,6 +182,8 @@ async def get_kill_data(pilot_name, db):
         stats[db.get_location(killmail['solar_system_id'])] += 1
         stats[get_timezone(killmail['killmail_time'])]['kills'] += 1
         stats[get_timezone(killmail['killmail_time'])]['attackers'] += len(killmail['attackers'])
+        if db.killed_on_gate(killmail) and not(db.used_capital(killmail['attackers'], pilot_id)) and not(db.used_blops(killmail['attackers'], pilot_id)):
+            stats['boy_scout'] += 1
 
         for attacker in killmail['attackers']:
             attacker_id = attacker.get('character_id')
@@ -225,6 +227,7 @@ async def get_kill_data(pilot_name, db):
     stats['cyno'] = stats['cyno'] / (stats['processed_killmails'] + 0.01)
     stats['capital_use'] = stats['capital_use'] / (stats['processed_killmails'] + 0.01)
     stats['blops_use'] = stats['blops_use'] / (stats['processed_killmails'] + 0.01)
+    stats['roleplaying_dock_workers'] = stats['roleplaying_dock_workers'] / (stats['processed_killmails'] + 0.01)
     if stats['blops_use'] > config.BLOPS_HL_PERCENTAGE:
         stats['warning'] = add_string(stats['warning'], 'BLOPS')
     if stats['cyno'] > config.CYNO_HL_PERCENTAGE:
@@ -233,6 +236,8 @@ async def get_kill_data(pilot_name, db):
         stats['warning'] = add_string(stats['warning'], 'SUPER')
     if stats['titan'] > 0:
         stats['warning'] = add_string(stats['warning'], 'TITAN')
+    if stats['roleplaying_dock_workers'] > config.SB_HL_PERCENTAGE:
+        stats['warning'] = add_string(stats['warning'], 'SMARTBOMB')
     return stats
 
 
@@ -242,28 +247,36 @@ def add_string(o, n):
     return '{} + {}'.format(o, n)
 
 
-async def process(data):
+async def process(data, db):
     """
     :param data: zkill data
     :return: None
     """
     result_killmails = []
-    start_time = time.time()
-    async with ClientSession() as session:
-        for d in data:
-            att = asyncio.ensure_future(fetch(d, session))
-            result_killmails.append(att)
 
-        results = await asyncio.gather(*result_killmails)
-    Logger.info('Gathered {} killmails from CCP servers in {} seconds'.format(len(data), time.time() - start_time))
-    json_results = []
-    for l in results:
-        try:
-            json_results.append(json.loads(l))
-        except:
-            json_results.append(l)
-            pass
-    for j in json_results:
+    for zkill in data:
+        r = db.get_killmail(zkill['killmail_id'])
+        if r:
+            new_dict = {}
+            for k in zkill:
+                new_dict[k] = zkill[k]
+            for k in r:
+                new_dict[k] = r[k]
+            result_killmails.append(new_dict)
+    data[:] = [z for z in data if z['killmail_id'] not in [d['killmail_id'] for d in result_killmails]]
+    Logger.info('Got {} killmails from local cache.'.format(len(result_killmails)))
+
+    if len(data) > 0:
+        start_time = time.time()
+        async with ClientSession() as session:
+            for d in data:
+                att = asyncio.ensure_future(fetch(d, session, db))
+                result_killmails.append(att)
+
+            results = await asyncio.gather(*result_killmails)
+        Logger.info('Gathered {} killmails from CCP servers in {} seconds'.format(len(data), time.time() - start_time))
+
+    """for j in json_results:
         Logger.debug('Parsing {}'.format(j))
         try:
             if not os.path.exists(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(str(j['killmail_id'])))):
@@ -271,41 +284,46 @@ async def process(data):
                     json.dump(j, file)
         except:
             Logger.error('Could not get killmail_id from {}'.format(j))
-            json_results.remove(j)
+            json_results.remove(j)"""
 
     merged_kills = []
     for zkill in data:
-        for ccpkill in json_results:
-            if ccpkill is not None and zkill['killmail_id'] == ccpkill.get('killmail_id'):
+        for ccpkill in results:
+            if zkill['killmail_id'] == ccpkill['killmail_id']:
                 new_dict = {}
-                for key in zkill.keys():
-                    new_dict[key] = zkill[key]
-                for key in ccpkill.keys():
-                    new_dict[key] = ccpkill[key]
+                for k in zkill:
+                    new_dict[k] = zkill[k]
+                for k in ccpkill:
+                    new_dict[k] = ccpkill[k]
                 merged_kills.append(new_dict)
     return merged_kills
 
 
-async def fetch(d, session):
+async def fetch(d, session, db):
     """
     :param d:
     :param session:
     :return: json response parsed into dictionary
     """
 
-    try:
+    """try:
         with open(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(str(d['killmail_id']))), 'r') as json_file:
             return json.load(json_file)
     except:
         pass
-        # Logger.info('Failed to open {}.json'.format(str(d['killmail_id'])))
+        # Logger.info('Failed to open {}.json'.format(str(d['killmail_id'])))"""
 
     url = "https://esi.evetech.net/v1/killmails/{}/{}/?datasource=tranquility".format(d['killmail_id'], d['zkb']['hash'])
-    try:
-        async with session.get(url) as response:
-            return await response.read()
-    except Exception as e:
-        Logger.error(e)
+    while True:
+        try:
+            async with session.get(url) as response:
+                r = await response.read()
+                s = json.loads(r)
+                db.store_killmail(s)
+                return s
+        except Exception as e:
+            Logger.error(e)
+            await asyncio.sleep(0.25)
 
 
 def add_to_dict(dict, key):

@@ -87,6 +87,7 @@ MAX_CHUNK = 50
 GUI_TITLE = "HawkEye " + __version__
 CYNO_HL_PERCENTAGE = 0.01
 BLOPS_HL_PERCENTAGE = 0.01
+SB_HL_PERCENTAGE = 0.1
 
 # Colour Scheme
 

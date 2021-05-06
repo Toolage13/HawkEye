@@ -258,6 +258,41 @@ class eveDB:
                                 entity_name str,
                                 last_update timestamp)""")
 
+        self.local_c.execute("""create table if not exists killmails(
+                                killmail_id int,
+                                killmail_time str,
+                                solar_system_id int)""")
+
+        self.local_c.execute("""create table if not exists victims(
+                                killmail_id int,
+                                alliance_id int,
+                                character_id int,
+                                corporation_id int,
+                                damage_taken int,
+                                ship_type_id int)""")
+
+        self.local_c.execute("""create table if not exists items(
+                                killmail_id int,
+                                flag int,
+                                item_type_id int,
+                                quantity_destroyed int,
+                                singleton int)""")
+
+        self.local_c.execute("""create table if not exists position(
+                                killmail_id int,
+                                x real,
+                                y real,
+                                z real)""")
+        self.local_c.execute("""create table if not exists attackers(
+                                killmail_id int,
+                                alliance_id int,
+                                character_id int,
+                                damage_done int,
+                                final_blow boolean,
+                                security_status real,
+                                ship_type int,
+                                weapon_type_id int)""")
+
     def get_region(self, region_id):
         return self.map_regions[self.map_solar_systems[region_id]['regionID']]
 
@@ -568,6 +603,41 @@ class eveDB:
     def query_characters(self, char_names):
         self.local_c.execute("""select char_id, char_name, corp_id, alliance_id from characters where char_name in ({})""".format(','.join(['?'] * len(char_names))), char_names)
         return [{'char_id': r[0], 'char_name': r[1], 'corp_id': r[2], 'alliance_id': r[3]} for r in self.local_c.fetchall()]
+
+    def insert_sql(self, table, columns, values):
+        sql = """insert into {} (killmail_id, {}) values ({})""".format(table, ', '.join(columns), ','.join('?'*len(values)))
+        self.local_c.execute(sql, tuple(values))
+        self.local_db.commit()
+
+    def store_killmail(self, json_data):
+        k = tuple([json_data['killmail_id']])
+        m = ['killmail_time', 'solar_system_id']
+        t = k + tuple([json_data[i] for i in m])
+        self.insert_sql('killmails', m, t)
+        m = ['alliance_id', 'character_id', 'corporation_id', 'damage_taken', 'ship_type_id']
+        t = k + tuple([json_data['victim'].get(i) for i in m])
+        self.insert_sql('victims', m, t)
+        Logger.info('Killmail stored.')
+
+    def get_killmail(self, killmail_id):
+        d = {}
+        self.local_c.execute("""select killmail_time, solar_system_id from killmails where killmail_id = ?""", (killmail_id, ))
+        r = self.local_c.fetchone()
+        if not r:
+            return None
+        d['killmail_id'] = killmail_id
+        d['killmail_time'] = r[0]
+        d['solar_system_id'] = r[1]
+
+        m = ['alliance_id', 'character_id', 'corporation_id', 'damage_taken', 'ship_type_id']
+        self.local_c.execute("""select {} from victims where killmail_id = ?""".format(', '.join(m)), (killmail_id, ))
+        r = self.local_c.fetchone()
+        victim = {}
+        for i in m:
+            victim[i] = r[m.index(i)]
+        d['victim'] = victim
+        Logger.info(d)
+        return None
 
 
 def clear_characters():
