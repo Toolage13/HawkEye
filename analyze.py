@@ -170,7 +170,7 @@ async def get_kill_data(pilot_name, db):
 
     for killmail in details:
         stats['processed_killmails'] += 1
-        add_to_dict(stats['top_regions'], db.get_region(killmail['solar_system_id']))
+        stats['top_regions'] = add_to_dict(stats['top_regions'], db.get_region(killmail['solar_system_id']))
         stats['average_pilots'] += len(killmail['attackers'])
         if len(killmail['attackers']) > 9:
             stats['avg_10'] += len(killmail['attackers'])
@@ -188,13 +188,13 @@ async def get_kill_data(pilot_name, db):
         for attacker in killmail['attackers']:
             attacker_id = attacker.get('character_id')
             if attacker_id == pilot_id:
-                add_to_dict(stats['top_ships'], attacker.get('ship_type_id'))
+                stats['top_ships'] = add_to_dict(stats['top_ships'], attacker.get('ship_type_id'))
                 if len(killmail['attackers']) > 9:
-                    add_to_dict(stats['top_10_ships'], attacker.get('ship_type_id'))
+                    stats['top_10_ships'] = add_to_dict(stats['top_10_ships'], attacker.get('ship_type_id'))
                 else:
-                    add_to_dict(stats['top_gang_ships'], attacker.get('ship_type_id'))
+                    stats['top_gang_ships'] = add_to_dict(stats['top_gang_ships'], attacker.get('ship_type_id'))
             else:
-                add_to_dict(stats['buttbuddies'], attacker_id)
+                stats['buttbuddies'] = add_to_dict(stats['buttbuddies'], attacker_id)
         if db.used_cyno(killmail['attackers'], pilot_id):
             stats['cyno'] += 1
         if db.used_capital(killmail['attackers'], pilot_id):
@@ -221,9 +221,9 @@ async def get_kill_data(pilot_name, db):
                                               stats['average_pilots']
                                               )
     stats['top_regions'] = ', '.join(r for r in get_top_three(stats['top_regions']) if r is not None)
-    stats['top_ships'] = ', '.join([s for s in [db.get_ship_name(i) for i in get_top_three(stats['top_ships'])] if s is not None])
-    stats['top_10_ships'] = ', '.join([s for s in [db.get_ship_name(i) for i in get_top_three(stats['top_10_ships'])] if s is not None])
-    stats['top_gang_ships'] = ', '.join([s for s in [db.get_ship_name(i) for i in get_top_three(stats['top_gang_ships'])] if s is not None])
+    stats['top_ships'] = ', '.join(s for s in [db.get_ship_name(i) for i in get_top_three(stats['top_ships'])] if s is not None)
+    stats['top_10_ships'] = ', '.join(s for s in [db.get_ship_name(i) for i in get_top_three(stats['top_10_ships'])] if s is not None)
+    stats['top_gang_ships'] = ', '.join(s for s in [db.get_ship_name(i) for i in get_top_three(stats['top_gang_ships'])] if s is not None)
     stats['cyno'] = stats['cyno'] / (stats['processed_killmails'] + 0.01)
     stats['capital_use'] = stats['capital_use'] / (stats['processed_killmails'] + 0.01)
     stats['blops_use'] = stats['blops_use'] / (stats['processed_killmails'] + 0.01)
@@ -333,6 +333,7 @@ def add_to_dict(dict, key):
             dict[key] = 1
     except AttributeError:
         return {key: 1}
+    return dict
 
 
 def get_timezone(time):

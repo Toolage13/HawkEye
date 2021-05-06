@@ -3,6 +3,7 @@ import config
 import eveDB
 import logging
 import os
+import shutil
 import sortarray
 import statusmsg
 import webbrowser
@@ -120,8 +121,9 @@ class Frame(wx.Frame):
 
         self.clear_cache = self.opt_menu.Append(wx.ID_ANY, '&Clear Character Cache')
         self.opt_menu.Bind(wx.EVT_MENU, self.clear_character_cache, self.clear_cache)
-        # self.file_about = self.file_menu.Append(wx.ID_ANY, '&About\tCTRL+A')
-        # self.file_menu.Bind(wx.EVT_MENU, self._openAboutDialog, self.file_about)
+
+        self.clear_kills = self.opt_menu.Append(wx.ID_ANY, "&Clear Killmail Cache")
+        self.opt_menu.Bind(wx.EVT_MENU, self.clear_kill_cache, self.clear_kills)
 
         self.menubar.Append(self.opt_menu, 'Options')
 
@@ -761,6 +763,10 @@ class Frame(wx.Frame):
     def clear_character_cache(self, e):
         eveDB.clear_characters()
         statusmsg.push_status("Cleared character cache")
+
+    def clear_kill_cache(self, e):
+        if os.path.exists(os.path.join(config.PREF_PATH, 'kills/')):
+            shutil.rmtree(os.path.join(config.PREF_PATH, 'kills/'))
 
 
 class App(wx.App):
