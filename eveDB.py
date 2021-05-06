@@ -401,12 +401,12 @@ class eveDB:
         sec_status = self.map_solar_systems[id]['security']
 
         if sec_status > 0.499999:
-            return 'trash_can_resident'
+            return 'highsec'
         if sec_status > 0.01:
-            return 'countryside_hillbilly'
+            return 'lowsec'
         if sec_status == -0.99:
-            return 'vietcong'
-        return 'coastal_city_elite'
+            return 'wormhole'
+        return 'nullsec'
 
     def used_smartbomb(self, a, p):
         """

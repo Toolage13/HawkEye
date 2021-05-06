@@ -71,6 +71,10 @@ OPTIONS_OBJECT = optstore.PersistentOptions(OPTIONS_FILE)
 # Store version information
 OPTIONS_OBJECT.Set("version", __version__)
 
+# Creates /kills folder in PREF_PATH if it doesn't exist
+if not os.path.exists(os.path.join(PREF_PATH, 'kills/')):
+    os.makedirs(os.path.join(PREF_PATH, 'kills/'))
+
 # Various constants
 MAX_NAMES = 500  # The max number of char names to be processed
 MAX_KM = 50  # Max number of killmails to process per character

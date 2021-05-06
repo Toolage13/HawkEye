@@ -39,6 +39,7 @@ def _determineApproach(array, sort_col):
     """
 
     if sort_col not in array[0].keys():
+        Logger.info("Missing key {} in {}".format(sort_col, array[0]))
         raise KeyError(sort_col, array)
 
     # Check type of each element to be sorted_list

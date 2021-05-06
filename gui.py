@@ -46,13 +46,13 @@ class Frame(wx.Frame):
         # Set parameters for columns
         self.columns = (
             # Index, Heading, Format, Default Width, Can Toggle, Default Show, Menu Name, Outlist Column
-            [0, "ID", wx.ALIGN_LEFT, 0, False, False, "", 'id'],
+            [0, "ID", wx.ALIGN_LEFT, 0, False, False, "", 'pilot_id'],
             [1, "Warning", wx.ALIGN_LEFT, 80, True, True, "Warning", 'warning'],
-            [2, "Character", wx.ALIGN_LEFT, 80, False, True, "Character", 'name'],
+            [2, "Character", wx.ALIGN_LEFT, 80, False, True, "Character", 'pilot_name'],
             [3, "Corporation", wx.ALIGN_LEFT, 80, True, True, "Corporation", 'corp_name'],
             [4, "Alliance", wx.ALIGN_LEFT, 80, True, True, "Alliance", 'alliance_name'],
             [5, "Cyno", wx.ALIGN_LEFT, 80, True, True, "Cyno Use", 'cyno'],
-            [6, "Avg. Gang", wx.ALIGN_LEFT, 80, True, True, "Average Gang", 'average_pilots'],
+            [6, "Avg. Gang", wx.ALIGN_LEFT, 80, True, True, "Average Gang", 'avg_gang'],
             [7, "Avg. Fleet", wx.ALIGN_LEFT, 80, True, True, "Average Fleet Size", 'avg_10'],
             [8, "Timezone", wx.ALIGN_LEFT, 80, True, True, "Timezone", "timezone"],
             [9, "Top Ships", wx.ALIGN_LEFT, 80, True, True, "Top Ships", 'top_ships'],
@@ -377,9 +377,9 @@ class Frame(wx.Frame):
 
             # Schema depending on output_list() in analyze.py
             out = [
-                r['id'],
+                r['pilot_id'],
                 r['warning'],
-                r['name'],
+                r['pilot_name'],
                 r['corp_name'],
                 r['alliance_name'],
                 '{:.0%}'.format(r['cyno']),
@@ -486,8 +486,8 @@ class Frame(wx.Frame):
         if len(character_id) > 0:
             outlist = self.options.Get("outlist")
             for r in outlist:
-                if str(r['id']) == character_id:
-                    character_id = r['id']
+                if str(r['pilot_id']) == character_id:
+                    character_id = r['pilot_id']
                     character_name = r['pilot_name']
                     corp_id = r['corp_id']
                     corp_name = r['corp_name']
@@ -628,7 +628,7 @@ class Frame(wx.Frame):
             outlist = sortarray.sort_array(
                 outlist,
                 self.columns[colidx][7],
-                sec_col='name',  # Secondary sort by name
+                sec_col='pilot_name',  # Secondary sort by name
                 prim_desc=sort_desc,
                 sec_desc=False,  # Secondary sort by name always ascending
                 case_sensitive=False

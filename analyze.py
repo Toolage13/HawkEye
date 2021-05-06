@@ -17,6 +17,15 @@ Logger = logging.getLogger(__name__)
 
 
 def main(pilot_names, db):
+    """
+    The main method takes the list of pilot_names, filters and then transforms it into a list of dictionaries
+    containing pilot data using _filter_pilots(). The list is then broken into chunks of size config.MAX_CHUNK and
+    the chunks passed through _concurrent_run_characters(), the result of this is a list of dictionaries containing
+    expanded pilot data. Each dictionary is appended to character_stats, which is finally returned.
+    :param pilot_names: A list of pilot names to parse
+    :param db: The eveDB to use.
+    :return character_stats: A list of dictionaries containing expanded pilot data
+    """
     filtered_pilot_data = _filter_pilots(pilot_names, db)
 
     if len(filtered_pilot_data) == 0:
@@ -41,6 +50,8 @@ def main(pilot_names, db):
 def _filter_pilots(pilot_names, db):
     """
     Get ignoredList from config, filter our list of pilot_names based on the pilot names stored in ignoredList
+    Get pilot_map with _get_pilot_ids() containing dictionaries with both pilot_id and pilot_name
+    Get pilot_affiliations with db.get_pilot_affiliations() which contains additional pilot_data (corp and alliance)
     :param pilot_names: List of pilot names
     :param db: EveDB object to run queries on
     :return: Filtered list
@@ -63,23 +74,42 @@ async def _get_pilot_ids(pilot_names, db):
     Gather pilot IDs by calling db.get_pilot_id() asynchronously
     :param pilot_names: List of pilot names
     :param db: EveDB object to run queries on
-    :return: List of pilot IDs
+    :return: List of dictionaries containing pilot_id and pilot_name
     """
     coros = [db.get_pilot_id(p) for p in pilot_names]
     return await asyncio.gather(*coros)
 
 
 def divide_chunks(l, n):
+    """
+    Divide a list l into chunks of n size, yield each list as iterated
+    :param l: Original list
+    :param n: Size of chunks
+    :yield: Each chunk
+    """
     for i in range(0, len(l), n):
         yield l[i:i + n]
 
 
 async def _concurrent_run_character(pilot_chunk, db):
+    """
+    Run pilot_data p through _get_kill_data() asynchronously and assemble all expanded pilot data via asyncio.gather()
+    :param pilot_chunk: List of pilot data stored as dictionaries
+    :param db: EveDB to use
+    :return: List of dictionaries containing expanded pilot data
+    """
     coros = [_get_kill_data(p, db) for p in pilot_chunk]
     return await asyncio.gather(*coros)
 
 
 async def _get_kill_data(pilot_data, db):
+    """
+    Return zkill data for pilot using _get_zkill_data(). Merge with kill data from CCP fetched with
+    _merge_zkill_ccp_kills(). Finally, pass to _prepare_stats() for final processing and then return
+    :param pilot_data: Dictionary of pilot data
+    :param db: EveDB object to use
+    :return: Dictionary of expanded pilot data
+    """
     Logger.info('Getting kill data for {}.'.format(pilot_data['pilot_name']))
     stats = {
         'alliance_id': pilot_data['alliance_id'],
@@ -93,25 +123,20 @@ async def _get_kill_data(pilot_data, db):
         'boy_scout': 0,
         'buttbuddies': {},
         'capital_use': 0,
-        'coastal_city_elite': 0,
         'corp_id': pilot_data['corp_id'],
         'corp_name': pilot_data['corp_name'],
-        'countryside_hillbilly': 0,
         'cyno': 0,
-        'dream_crusher': 0,
         'eutz': {'kills': 0.01, 'attackers': 0},
-        'gopnik': 0,
-        'heavy_hitter': 0,
-        'hotdrop': 0,
-        'involved_pilots': [],
-        'nanofag': 0,
+        'highsec': 0,
+        'lowsec': 0,
+        'nullsec': 0,
         'pilot_id': pilot_data['pilot_id'],
         'pilot_name': pilot_data['pilot_name'],
         'playstyle': 'None',
         'pro_10': 0,
         'pro_gang': 0,
         'processed_killmails': 0,
-        'roleplaying_dock_workers': 0,
+        'smartbomb': 0,
         'super': 0,
         'timezone': 'N/A',
         'titan': 0,
@@ -119,10 +144,9 @@ async def _get_kill_data(pilot_data, db):
         'top_gang_ships': None,
         'top_regions': None,
         'top_ships': None,
-        'trash_can_resident': 0,
         'ustz': {'kills': 0.01, 'attackers': 0},
-        'vietcong': 0,
-        'warning': ''
+        'warning': '',
+        'wormhole': 0
     }
 
     zkill_data = await _get_zkill_data(pilot_data['pilot_id'], pilot_data['pilot_name'])
@@ -138,6 +162,14 @@ async def _get_kill_data(pilot_data, db):
 
 
 async def _get_zkill_data(pilot_id, pilot_name):
+    """
+    Request zkillboard page 1 from zkill for pilot_id, retry up to config.ZKILL_RETRY times with a brief delay between
+    requests of asyncio.sleep() * config.ZKILL_MULTIPLIER. If the pilot has no zkill, zkill returns an empty list []
+    and we return None for data. If data is still None after config.ZKILL_RETRY retries, return None
+    :param pilot_id: Pilot ID
+    :param pilot_name: Pilot name
+    :return: Data if retrieved, otherwise None
+    """
     url = "https://zkillboard.com/api/kills/characterID/{}/page/{}/".format(pilot_id, 1)
     headers = {'Accept-Encoding': 'gzip', 'User-Agent': 'HawkEye, Author: Kain Tarr'}
     statusmsg.push_status('Requesting {}'.format(url))
@@ -169,12 +201,12 @@ async def _get_zkill_data(pilot_id, pilot_name):
 
 async def _merge_zkill_ccp_kills(data):
     """
+    Try to fetch kills locally using _fetch_local() if available and store them in result_killmails. Rehash data to
+    remove the killmails that were found locally. Pass the remaining killmails as data to CCP via _fetch(). Finally,
+    merge the zkill data with the CCP kill data, matching on killmail_id and merging into a list of dictionaries
     :param data: zkill data
-    :return: None
+    :return: The merged killmail data from zkill and CCP as result_killmails
     """
-    if not os.path.exists(os.path.join(config.PREF_PATH, 'kills/')):
-        os.makedirs(os.path.join(config.PREF_PATH, 'kills/'))
-
     result_killmails = []
 
     for zkill in data:
@@ -203,21 +235,29 @@ async def _merge_zkill_ccp_kills(data):
         statusmsg.push_status('Gathered {} killmails from CCP servers in {} seconds'.format(len(data), round(time.time() - start_time, 2)))
         Logger.info('Gathered {} killmails from CCP servers in {} seconds'.format(len(data), round(time.time() - start_time, 2)))
 
-        results = [json.loads(kill) for kill in results]
-
         for zkill in data:
             for ccpkill in results:
-                if zkill['killmail_id'] == ccpkill['killmail_id']:
-                    new_dict = {}
-                    for k in zkill:
-                        new_dict[k] = zkill[k]
-                    for k in ccpkill:
-                        new_dict[k] = ccpkill[k]
-                    result_killmails.append(new_dict)
+                try:
+                    if zkill['killmail_id'] == ccpkill['killmail_id']:
+                        new_dict = {}
+                        for k in zkill:
+                            new_dict[k] = zkill[k]
+                        for k in ccpkill:
+                            new_dict[k] = ccpkill[k]
+                        result_killmails.append(new_dict)
+                except Exception as e:
+                    Logger.error(zkill)
+                    Logger.error(ccpkill)
+                    raise(e)
     return result_killmails
 
 
 def _fetch_local(killmail_id):
+    """
+    Try to fetch a killmail locally (stored as json)
+    :param killmail_id: Killmail ID
+    :return: json file if found, otherwise None
+    """
     try:
         with open(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(killmail_id)), 'r') as json_file:
             return json.load(json_file)
@@ -234,15 +274,19 @@ async def _fetch(d, session):
 
     url = "https://esi.evetech.net/v1/killmails/{}/{}/?datasource=tranquility".format(d['killmail_id'], d['zkb']['hash'])
     while True:
-        try:
             async with session.get(url) as response:
                 r = await response.read()
+                try:
+                    j = json.loads(r)
+                except json.decoder.JSONDecodeError:
+                    await asyncio.sleep(0.25)
+                    continue
+                if j.get('error'):
+                    await asyncio.sleep(0.25)
+                    continue
                 with open(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(d['killmail_id'])), 'w') as file:
-                    json.dump(json.loads(r), file)
-                return r
-        except Exception as e:
-            Logger.error(e)
-            await asyncio.sleep(0.25)
+                    json.dump(j, file)
+                return j
 
 
 def _prepare_stats(stats, killmails, db, pilot_id):
@@ -280,7 +324,7 @@ def _prepare_stats(stats, killmails, db, pilot_id):
         if db.used_blops(killmail['attackers'], pilot_id):
             stats['blops_use'] += 1
         if db.used_smartbomb(killmail['attackers'], pilot_id):
-            stats['roleplaying_dock_workers'] += 1
+            stats['smartbobm'] += 1
         if db.used_super(killmail['attackers'], pilot_id):
             stats['super'] += 1
         if db.used_titan(killmail['attackers'], pilot_id):
