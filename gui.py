@@ -697,7 +697,6 @@ class Frame(wx.Frame):
             if c.GetName() == "HighlightDialog":  # Needs to match name in highlightdialog.py
                 c.Raise()
                 return
-        highlightdialog.showHighlightDialog(self)
 
     def _restoreColWidth(self):
         """
