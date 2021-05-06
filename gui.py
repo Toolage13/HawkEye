@@ -1,3 +1,11 @@
+# !/usr/local/bin/python3.8
+# Github: https://github.com/Toolage13/HawkEye
+"""
+Full credit to White Russsian, most of this was shamelessly stolen from him: https://github.com/Eve-PySpy/PySpy
+
+This is the GUI file, it has an App class which just displays the Frame, and the main Frame class which contains all
+the details on how the GUI is made. The GUI contains numerous methods for various user interaction responses.
+"""
 import aboutdialog
 import config
 import eveDB
@@ -15,8 +23,13 @@ Logger = logging.getLogger(__name__)
 
 
 class Frame(wx.Frame):
+    """
+    Just an extension of wx.Frame, a whole lot going on in here.
+    """
     def __init__(self, *args, **kwds):
-
+        """
+        Setting a lot of stuff, you know the __init__ deal, stiff drink recommended before reading
+        """
         # Persistent Options
         self.options = config.OPTIONS_OBJECT
 
@@ -61,7 +74,7 @@ class Frame(wx.Frame):
             self.file_menu = wx.Menu()
             self.file_about = self.file_menu.Append(wx.ID_ANY, '&About\tCTRL+A')
             self.file_menu.Bind(wx.EVT_MENU, self._openAboutDialog, self.file_about)
-            self.file_quit = self.file_menu.Append(wx.ID_ANY, 'Quit PySpy')
+            self.file_quit = self.file_menu.Append(wx.ID_ANY, 'Quit HawkEye')
             self.file_menu.Bind(wx.EVT_MENU, self.OnQuit, self.file_quit)
             self.menubar.Append(self.file_menu, 'File')
         if os.name == "posix":  # For macOS
@@ -102,9 +115,7 @@ class Frame(wx.Frame):
         self.hl_list.Check(self.options.Get("HlList", True))
 
         # Toggle Stay on-top
-        self.stay_ontop = self.view_menu.AppendCheckItem(
-            wx.ID_ANY, 'Stay on-&top\tCTRL+T'
-            )
+        self.stay_ontop = self.view_menu.AppendCheckItem(wx.ID_ANY, 'Stay on-&top\tCTRL+T')
         self.view_menu.Bind(wx.EVT_MENU, self._toggleStayOnTop, self.stay_ontop)
         self.stay_ontop.Check(self.options.Get("StayOnTop", True))
 
@@ -120,18 +131,16 @@ class Frame(wx.Frame):
         self.opt_menu.AppendSeparator()
 
         self.clear_cache = self.opt_menu.Append(wx.ID_ANY, '&Clear Character Cache')
-        self.opt_menu.Bind(wx.EVT_MENU, self.clear_character_cache, self.clear_cache)
+        self.opt_menu.Bind(wx.EVT_MENU, self._clear_character_cache, self.clear_cache)
 
         self.clear_kills = self.opt_menu.Append(wx.ID_ANY, "&Clear Killmail Cache")
-        self.opt_menu.Bind(wx.EVT_MENU, self.clear_kill_cache, self.clear_kills)
+        self.opt_menu.Bind(wx.EVT_MENU, self._clear_kill_cache, self.clear_kills)
 
         self.menubar.Append(self.opt_menu, 'Options')
 
         # Toggle Dark-Mode
-        self.dark_mode = self.view_menu.AppendCheckItem(
-            wx.ID_ANY, '&Dark Mode\tCTRL+D'
-            )
-        self.dark_mode.Check(self.options.Get("DarkMode", False))
+        self.dark_mode = self.view_menu.AppendCheckItem(wx.ID_ANY, '&Dark Mode\tCTRL+D')
+        self.dark_mode.Check(self.options.Get("DarkMode", True))
         self.view_menu.Bind(wx.EVT_MENU, self._toggleDarkMode, self.dark_mode)
         self.use_dm = self.dark_mode.IsChecked()
 
@@ -144,12 +153,11 @@ class Frame(wx.Frame):
         self.grid.ShowScrollbars(wx.SHOW_SB_NEVER, wx.SHOW_SB_NEVER)
 
         # The status label shows various info and error messages.
-        self.status_label = wx.StaticText(
-            self,
-            wx.ID_ANY,
-            "Please copy some EVE character names to clipboard...",
-            style=wx.ALIGN_LEFT | wx.ST_ELLIPSIZE_END
-            )
+        self.status_label = wx.StaticText(self,
+                                          wx.ID_ANY,
+                                          "Please copy some EVE character names to clipboard...",
+                                          style=wx.ALIGN_LEFT | wx.ST_ELLIPSIZE_END
+                                          )
         self.status_label.SetName("Status_Bar")
 
         # First set default properties, then restore persistence if any
@@ -182,17 +190,16 @@ class Frame(wx.Frame):
         self.__do_layout()
 
     def __set_properties(self, dark_toggle=None):
-        '''
+        """
         Set the initial properties for the various widgets.
-        :param `dark_toggle`: Boolean indicating if only the properties
-        related to the colour scheme should be set or everything.
-        '''
+        :param dark_toggle: Boolean indicating if only the properties related to the colour scheme should be set
+        """
         # Colour Scheme Dictionaries
         self.dark_dict = config.DARK_MODE
         self.normal_dict = config.NORMAL_MODE
 
         # Colour Scheme
-        if not self.options.Get("DarkMode", False):
+        if not self.options.Get("DarkMode", True):
             self.bg_colour = self.normal_dict["BG"]
             self.txt_colour = self.normal_dict["TXT"]
             self.lne_colour = self.normal_dict["LNE"]
@@ -230,8 +237,8 @@ class Frame(wx.Frame):
         self.SetTitle(config.GUI_TITLE)
         self.SetSize((720, 400))
         self.SetMenuBar(self.menubar)
-        # Insert columns based on parameters provided in col_def
 
+        # Insert columns based on parameters provided in col_def
         # self.grid.CreateGrid(0, 0)
         if self.grid.GetNumberCols() < len(self.columns):
             self.grid.AppendCols(len(self.columns))
@@ -249,18 +256,16 @@ class Frame(wx.Frame):
         self.grid.SetCellHighlightPenWidth(0)
         colidx = 0
         for col in self.columns:
-            self.grid.SetColLabelValue(
-                col[0],  # Index
-                col[1],  # Heading
-                )
+            self.grid.SetColLabelValue(col[0],  # Index
+                                       col[1],  # Heading
+                                       )
             # self.grid.SetColSize(colidx, col[3])
             colidx += 1
 
     def __do_layout(self):
-        '''
-        Assigns the various widgets to sizers and calls a number of helper
-        functions.
-        '''
+        """
+        Assigns the various widgets to sizers and calls a number of helper functions
+        """
         sizer_main = wx.BoxSizer(wx.VERTICAL)
         sizer_bottom = wx.BoxSizer(wx.HORIZONTAL)
         sizer_main.Add(self.grid, 1, wx.EXPAND, 0)
@@ -275,9 +280,8 @@ class Frame(wx.Frame):
 
     def _createShowColMenuItems(self):
         """
-        Populates the View menu with show column toggle menu items for
-        each column that is toggleable. It uses the information provided
-        in self.columns.
+        Populates the View menu with show column toggle menu items for each column that is toggleable. It uses the
+        information provided in self.columns
         """
         # For each column, create show / hide menu items, if hideable
         self.col_menu_items = [[] for i in self.columns]
@@ -287,33 +291,23 @@ class Frame(wx.Frame):
             index = col[0]
             options_key = "Show" + col[1]
             menu_name = "Show " + col[6]
-            self.col_menu_items[index] = self.view_menu.AppendCheckItem(
-                wx.ID_ANY,
-                menu_name
-                )
+            self.col_menu_items[index] = self.view_menu.AppendCheckItem(wx.ID_ANY, menu_name)
             # Column show / hide, depending on user settings, if any
-            checked = self.options.Get(
-                options_key,
-                self.columns[index][5]
-                )
-            self.col_menu_items[index].Check(
-                self.options.Get(options_key, checked)
-                )
+            checked = self.options.Get(options_key, self.columns[index][5])
+            self.col_menu_items[index].Check(self.options.Get(options_key, checked))
             # Bind new menu item to toggleColumn method
-            self.view_menu.Bind(
-                wx.EVT_MENU,
-                lambda evt, index=index: self._toggleColumn(index, evt),
-                self.col_menu_items[index]
-                )
+            self.view_menu.Bind(wx.EVT_MENU,
+                                lambda evt,
+                                index=index: self._toggleColumn(index, evt),
+                                self.col_menu_items[index]
+                                )
 
     def _toggleColumn(self, index, event=None):
-        '''
-        Depending on the respective menu item state, either reveals or
-        hides a column. If it hides a column, it first stores the old
-        column width in self.options to allow for subsequent restore.
-        :param `index`: Integer representing the index of the column
-        which is to shown / hidden.
-        '''
+        """
+        Depending on the respective menu item state, either reveals or hides a column. If it hides a column, it first
+        stores the old column width in self.options to allow for subsequent restore
+        :param index: Integer representing the index of the column which is to be shown or hidden.
+        """
         try:
             checked = self.col_menu_items[index].IsChecked()
         except:
@@ -335,49 +329,31 @@ class Frame(wx.Frame):
         self._stretchLastCol()
 
     def _stretchLastCol(self, event=None):
-        '''
-        Makes sure the last column fills any blank space of the
-        grid. For this reason, the last list item of self.columns should
-        describe an empty column.
-        '''
+        """
+        Makes sure the last column fills any blank space of the grid. For this reason, the last list item of
+        self.columns should describe an empty column.
+        """
         grid_width = self.grid.Size.GetWidth()
         cols_width = 0
         for index in range(self.columns[-1][0] + 1):
             cols_width += self.grid.GetColSize(index)
         stretch_width = grid_width - cols_width
-        last_col_width = max(
-            self.grid.GetColSize(index) + stretch_width,
-            self.columns[index][3]
-        )
+        last_col_width = max(self.grid.GetColSize(index) + stretch_width, self.columns[index][3])
         self.grid.SetColSize(index, last_col_width)
         self.Layout()
         if event is not None:
             event.Skip(True)
 
-    def appendString(self, org, app):
-        """
-        Appends a String to another string with a "+" if the org string is not "".
-        :param org: Original String
-        :param app: String which is to be appended to the org string
-        :return:
-        """
-        if org == "-":
-            return app
-        else:
-            return org + " + " + app
-
     def updateList(self, outlist, duration=None, filtered=None):
-        '''
-        `updateList()` takes the output of `output_list()` in `analyze.py` (via
-        `sortOutlist()`) or a copy thereof stored in self.option, and uses it
-        to populate the grid widget. Before it does so, it checks each
-        item in outlist against a list of ignored characters, corporations
-        and alliances. Finally, it highlights certain characters and
-        updates the statusbar message.
-        :param `outlist`: A list of rows with character data.
-        :param `duration`: Time in seconds taken to query all relevant
-        databases for each character.
-        '''
+        """
+        updateList() takes the output of main() in analyze.py (via sortOutlist()) or a copy thereof stored in
+        self.option, and uses it to populate the grid widget. Before it does so, it checks each item in outlist against
+        a list of ignored characters, corporations and alliances. Finally, it highlights certain characters and updates
+        the statusbar message.
+        :param outlist: A list of dictionaries with character data
+        :param duration: Time in seconds taken to query all relevant databases for each character
+        :param filtered: How many characters were not run (filtered)
+        """
         # If updateList() gets called before outlist has been provided, do nothing
         if outlist is None:
             return
@@ -452,31 +428,38 @@ class Frame(wx.Frame):
                 colidx += 1
             rowidx += 1
 
-        Logger.info(str(len(outlist)) + " characters analysed, in " + str(duration) + " seconds (" + str(filtered) + " filtered).")
-        statusmsg.push_status(str(len(outlist)) + " characters analysed, in " + str(duration) + " seconds (" + str(filtered) + " filtered). Double click character to go to zKillboard.")
+        Logger.info("{} characters analysed, in {} seconds ({} filtered).".format(len(outlist), duration, filtered))
+        statusmsg.push_status("{} characters analysed, in {} seconds ({} filtered). Double click character to go to "
+                              "zKillboard.".format(len(outlist), duration, filtered))
 
     def updateStatusbar(self, msg):
-        '''Gets called by push_status() in statusmsg.py.'''
+        """
+        Gets called by push_status() in statusmsg.py.
+        :param msg: Message to be pushed to the statusbar
+        """
         if isinstance(msg, str):
             self.status_label.SetLabel(msg)
             self.Layout()
 
     def _goToZKill(self, event):
+        """
+        Get the pilot_id from the row and open the relevant zkill page for given id
+        :param event: Required
+        """
         rowidx = event.GetRow()
         character_id = self.options.Get("outlist")[rowidx]['id']
-        url = "https://zkillboard.com/character/" + str(character_id) + "/"
+        url = "https://zkillboard.com/character/{}/".format(str(character_id))
 
         webbrowser.open_new_tab(url)
 
     def _showContextMenu(self, event):
-        '''
-        Gets invoked by right click on any list item and produces a
-        context menu that allows the user to add the selected character/corp/alliance
-        to PySpy's list of "ignored characters" which will no longer be
-        shown in search results and add the selected character/corp/alliance
-        to PySpy's list of "highlighted characters" which will hihglight them in the grid.
-        '''
-
+        """
+        Gets invoked by right click on any list item and produces a context menu that allows the user to add the
+        selected character/corp/alliance to HawkEye's list of "ignored characters" which will no longer be shown in
+        search results, OR add the selected character/corp/alliance to HawkEye's list of "highlighted characters" which
+        will hihglight them in the grid.
+        :param event: Required
+        """
         def OnIgnore(id, name, type, e=None):
             ignored_list = self.options.Get("ignoredList", default=[])
             ignored_list.append([id, name, type])
@@ -505,7 +488,7 @@ class Frame(wx.Frame):
             for r in outlist:
                 if str(r['id']) == character_id:
                     character_id = r['id']
-                    character_name = r['name']
+                    character_name = r['pilot_name']
                     corp_id = r['corp_id']
                     corp_name = r['corp_name']
                     alliance_id = r['alliance_id']
@@ -514,14 +497,29 @@ class Frame(wx.Frame):
             self.menu = wx.Menu()
             # Context menu to ignore characters, corporations and alliances.
             item_ig_char = self.menu.Append(wx.ID_ANY, "Ignore character '" + character_name + "'")
-            self.menu.Bind(wx.EVT_MENU, lambda evt, id=character_id, name=character_name: OnIgnore(id, name, "Character", evt), item_ig_char)
+            self.menu.Bind(wx.EVT_MENU,
+                           lambda evt,
+                           id=character_id,
+                           name=character_name: OnIgnore(id, name, "Character", evt),
+                           item_ig_char
+                           )
 
             item_ig_corp = self.menu.Append(wx.ID_ANY, "Ignore corporation: '" + corp_name + "'")
-            self.menu.Bind(wx.EVT_MENU, lambda evt, id=corp_id, name=corp_name: OnIgnore(id, name, "Corporation", evt), item_ig_corp)
+            self.menu.Bind(wx.EVT_MENU,
+                           lambda evt,
+                           id=corp_id,
+                           name=corp_name: OnIgnore(id, name, "Corporation", evt),
+                           item_ig_corp
+                           )
 
             if alliance_name != 'None':
                 item_ig_alliance = self.menu.Append(wx.ID_ANY, "Ignore alliance: '" + alliance_name + "'")
-                self.menu.Bind(wx.EVT_MENU, lambda evt, id=alliance_id, name=alliance_name: OnIgnore(id, name, "Alliance", evt), item_ig_alliance)
+                self.menu.Bind(wx.EVT_MENU,
+                               lambda evt,
+                               id=alliance_id,
+                               name=alliance_name: OnIgnore(id, name, "Alliance", evt),
+                               item_ig_alliance
+                               )
 
             self.menu.AppendSeparator()
 
@@ -540,18 +538,14 @@ class Frame(wx.Frame):
 
             # Context menu to highlight characters, corporations and alliances
             if not hl_char:
-                item_hl_char = self.menu.Append(
-                    wx.ID_ANY, "Highlight character '" + character_name + "'"
-                )
+                item_hl_char = self.menu.Append(wx.ID_ANY, "Highlight character '" + character_name + "'")
                 self.menu.Bind(
                     wx.EVT_MENU,
                     lambda evt, id=character_id, name=character_name: OnHighlight(id, name, "Character", evt),
                     item_hl_char
                 )
             else:
-                item_hl_char = self.menu.Append(
-                    wx.ID_ANY, "Stop highlighting character '" + character_name + "'"
-                )
+                item_hl_char = self.menu.Append(wx.ID_ANY, "Stop highlighting character '" + character_name + "'")
                 self.menu.Bind(
                     wx.EVT_MENU,
                     lambda evt, id=character_id, name=character_name: OnDeHighlight(id, name, "Character", evt),
@@ -559,18 +553,14 @@ class Frame(wx.Frame):
                 )
 
             if not hl_corp:
-                item_hl_corp = self.menu.Append(
-                    wx.ID_ANY, "Highlight corporation '" + corp_name + "'"
-                )
+                item_hl_corp = self.menu.Append(wx.ID_ANY, "Highlight corporation '" + corp_name + "'")
                 self.menu.Bind(
                     wx.EVT_MENU,
                     lambda evt, id=corp_id, name=corp_name: OnHighlight(id, name, "Corporation", evt),
                     item_hl_corp
                 )
             else:
-                item_hl_corp = self.menu.Append(
-                    wx.ID_ANY, "Stop highlighting corporation '" + corp_name + "'"
-                )
+                item_hl_corp = self.menu.Append(wx.ID_ANY, "Stop highlighting corporation '" + corp_name + "'")
                 self.menu.Bind(
                     wx.EVT_MENU,
                     lambda evt, id=corp_id, name=corp_name: OnDeHighlight(id, name, "Corporation", evt),
@@ -579,18 +569,16 @@ class Frame(wx.Frame):
 
             if alliance_name != 'None':
                 if not hl_alliance:
-                    item_hl_alliance = self.menu.Append(
-                        wx.ID_ANY, "Highlight alliance: '" + alliance_name + "'"
-                    )
+                    item_hl_alliance = self.menu.Append(wx.ID_ANY, "Highlight alliance: '" + alliance_name + "'")
                     self.menu.Bind(
                         wx.EVT_MENU,
                         lambda evt, id=alliance_id, name=alliance_name: OnHighlight(id, name, "Alliance", evt),
                         item_hl_alliance
                     )
                 else:
-                    item_hl_alliance = self.menu.Append(
-                        wx.ID_ANY, "Stop highlighting alliance: '" + alliance_name + "'"
-                    )
+                    item_hl_alliance = self.menu.Append(wx.ID_ANY,
+                                                        "Stop highlighting alliance: '" + alliance_name + "'"
+                                                        )
                     self.menu.Bind(
                         wx.EVT_MENU,
                         lambda evt, id=alliance_id, name=alliance_name: OnDeHighlight(id, name, "Alliance", evt),
@@ -602,7 +590,12 @@ class Frame(wx.Frame):
 
     def sortOutlist(self, event=None, outlist=None, duration=None, filtered=None):
         """
-        If called by event handle, i.e. user
+        Pass the outlist to sortarray.sort_array() and pass back to updateList to refresh gui view.
+        :param event: Required
+        :param outlist: outlist to process
+        :param duration: How long outlist took to generate (typically given when called by __main__)
+        :param filtered: How many pilots were filtered out before processing the clipboard (typically given when called
+        by __main__)
         """
         if event is None:
             # Default sort by character name ascending.
@@ -623,15 +616,11 @@ class Frame(wx.Frame):
             self.grid.SetColLabelValue(col[0], col[1])
 
         # Assign sort indicator to sort column
-        self.grid.SetColLabelValue(
-            colidx,
-            self.columns[colidx][1] + " " + arrow
-            )
+        self.grid.SetColLabelValue(colidx, self.columns[colidx][1] + " " + arrow)
         self.options.Set("SortColumn", colidx)
         self.options.Set("SortDesc", sort_desc)
         event = None
-        # Sort outlist. Note: outlist columns are not the same as
-        # self.grid columns!!!
+        # Sort outlist. Note: outlist columns are not the same as self.grid columns!!!
         if outlist is None:
             outlist = self.options.Get("outlist", False)
 
@@ -648,6 +637,10 @@ class Frame(wx.Frame):
         self.updateList(outlist, duration=duration, filtered=filtered)
 
     def _toggleHighlighting(self, e):
+        """
+        Check and set highlight options, pass to updateList to refresh grid view
+        :param e: Required
+        """
         self.options.Set("HlBlops", self.hl_blops.IsChecked())
         self.options.Set("HlCyno", self.hl_cyno.IsChecked())
         self.options.Set("HlList", self.hl_list.IsChecked())
@@ -656,10 +649,19 @@ class Frame(wx.Frame):
         self.updateList(self.options.Get("outlist", None))
 
     def _toggleStayOnTop(self, evt=None):
+        """
+        Check and set stay on top option, then set that option for entire Frame
+        :param evt: Required
+        """
         self.options.Set("StayOnTop", self.stay_ontop.IsChecked())
         self.ToggleWindowStyle(wx.STAY_ON_TOP)
 
     def _toggleDarkMode(self, evt=None):
+        """
+        Check and set dark mode, then call __set_properties to change settings, then refresh the GUI, then finally
+        refresh the grid
+        :param evt: Required
+        """
         self.options.Set("DarkMode", self.dark_mode.IsChecked())
         self.use_dm = self.dark_mode.IsChecked()
         self.__set_properties(dark_toggle=True)
@@ -668,10 +670,11 @@ class Frame(wx.Frame):
         self.updateList(self.options.Get("outlist"))
 
     def _openAboutDialog(self, evt=None):
-        '''
-        Checks if AboutDialog is already open. If not, opens the dialog
-        window, otherwise brings the existing dialog window to the front.
-        '''
+        """
+        Checks if AboutDialog is already open. If not, opens the dialog window, otherwise brings the existing dialog
+        window to the front.
+        :param evt: Required
+        """
         for c in self.GetChildren():
             if c.GetName() == "AboutDialog":  # Needs to match name in aboutdialog.py
                 c.Raise()
@@ -679,29 +682,26 @@ class Frame(wx.Frame):
         aboutdialog.showAboutBox(self)
 
     def _clearIgnoredEntities(self, evt=None):
+        """
+        Empty the options ignoreList
+        :param evt: Required
+        """
         self.options.Set("ignoredList", [])
         self.updateList(self.options.Get("outlist", None))
         statusmsg.push_status("Cleared ignored entities")
 
     def _clearHighlightedEntities(self, evt=None):
+        """
+        Empty the options highlightedList
+        :param evt: Required
+        """
         self.options.Set("highlightedList", [])
         self.updateList(self.options.Get("outlist", None))
         statusmsg.push_status("Cleared highlighted entities")
 
-    def _openHightlightDialog(self, evt=None):
-        '''
-        Checks if HightlightDialog is already open. If not, opens the dialog
-        window, otherwise brings the existing dialog window to the front.
-        '''
-        for c in self.GetChildren():
-            if c.GetName() == "HighlightDialog":  # Needs to match name in highlightdialog.py
-                c.Raise()
-                return
-
     def _restoreColWidth(self):
         """
-        Restores column width either to default or value stored from
-        previous session.
+        Restores column width either to default or value stored from previous session
         """
         for col in self.columns:
             header = col[1]
@@ -716,8 +716,7 @@ class Frame(wx.Frame):
 
     def _saveColumns(self):
         """
-        Saves custom column widths, since wxpython's Persistence Manager
-        is unable to do so for Grid widgets.
+        Saves custom column widths, since wxpython's Persistence Manager is unable to do so for Grid widgets
         """
         for col in self.columns:
             is_hideable = col[4]
@@ -738,9 +737,24 @@ class Frame(wx.Frame):
                 self.options.Set(options_key, menu_item_chk)
             pass
 
+    def _clear_character_cache(self, e):
+        """
+        Call eveDB.clear_characters() which empties the characters.db
+        """
+        eveDB.clear_characters()
+        statusmsg.push_status("Cleared character cache")
+
+    def _clear_kill_cache(self, e):
+        """
+        Use shutil.rmtree() to remove the entire kills folder and stored kills
+        :param e:
+        """
+        if os.path.exists(os.path.join(config.PREF_PATH, 'kills/')):
+            shutil.rmtree(os.path.join(config.PREF_PATH, 'kills/'))
+
     def OnClose(self, event=None):
         """
-        Run a few clean-up tasks on close and save persistent properties.
+        Run a few clean-up tasks on close and save persistent properties
         """
         self._persistMgr.SaveAndUnregister()
 
@@ -757,20 +771,19 @@ class Frame(wx.Frame):
         event.Skip() if event else False
 
     def OnQuit(self, e):
+        """
+        Quit
+        :param e: Required
+        """
         self.Close()
-
-    def clear_character_cache(self, e):
-        eveDB.clear_characters()
-        statusmsg.push_status("Cleared character cache")
-
-    def clear_kill_cache(self, e):
-        if os.path.exists(os.path.join(config.PREF_PATH, 'kills/')):
-            shutil.rmtree(os.path.join(config.PREF_PATH, 'kills/'))
 
 
 class App(wx.App):
+    """
+    General App class
+    """
     def OnInit(self):
-        self.PySpy = Frame(None, wx.ID_ANY, "")
-        self.SetTopWindow(self.PySpy)
-        self.PySpy.Show()
+        self.MyFrame = Frame(None, wx.ID_ANY, "")
+        self.SetTopWindow(self.MyFrame)
+        self.MyFrame.Show()
         return True

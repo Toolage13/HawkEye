@@ -1,3 +1,8 @@
+# !/usr/local/bin/python3.8
+# Github: https://github.com/Toolage13/HawkEye
+"""
+This is the big boy that handles all the fetching of data, and analysis of the fetched data.
+"""
 import asyncio
 from aiohttp import ClientSession
 import config
@@ -11,10 +16,30 @@ import time
 Logger = logging.getLogger(__name__)
 
 
+def _filter_pilots(pilot_names):
+    """
+    Get ignoredList from config, filter our list of pilot_names based on the pilot names stored in ignoredList
+    :param pilot_names: List of pilot names
+    :return: Filtered list
+    """
+    ignore_list = config.OPTIONS_OBJECT.Get("ignoredList", default=[])
+    Logger.info("Removing pilots {} from list to retrieve.".format(
+        [p for p in pilot_names if p in [i[1] for i in ignore_list]]))
+    return [p for p in pilot_names if p not in [i[1] for i in ignore_list]]
+
+
+def _retrieve_pilot_ids(pilot_names, db):
+    """
+    Retrieve pilot IDs,
+    """
+
+    stored_pilot_ids = db.get_stored_pilot_ids(pilot_names)
+
+    pilot_ids_from_ccp = _fetch_pilot_ids_from_ccp()
+
 def main(pilot_names, db):
-    ignore_list = config.OPTIONS_OBJECT.Get("ignoredList")
-    Logger.info('Removing pilots {} from list to retrieve.'.format([p for p in pilot_names if p in [i[1] for i in ignore_list]]))
-    new_pilot_names = [p for p in pilot_names if p not in [i[1] for i in ignore_list]]
+    new_pilot_names = _filter_pilots(pilot_names)
+
     statusmsg.push_status("Gathering {} pilot IDs from CCP...".format(len(new_pilot_names)))
     Logger.info("Gathering {} pilot IDs from CCP...".format(len(new_pilot_names)))
     start_time = time.time()
@@ -23,6 +48,7 @@ def main(pilot_names, db):
     loop.close()
     statusmsg.push_status("Gathered {} pilot IDs from CCP in {} seconds.".format(len(new_pilot_names), round(time.time() - start_time, 2)))
     Logger.info("Gathered {} pilot IDs from CCP in {} seconds.".format(len(new_pilot_names), round(time.time() - start_time, 2)))
+
     pilot_ids = db.query_characters(new_pilot_names)
     transform_ignore = {i[0]: i[1] for i in ignore_list}
     for p in pilot_ids:
@@ -34,6 +60,7 @@ def main(pilot_names, db):
             Logger.info(
                 'Removing pilot {} from list to retrieve ({}).'.format(p['char_name'], transform_ignore[p['alliance_id']]))
     pilot_ids = [p for p in pilot_ids if p['alliance_id'] not in transform_ignore.keys()]
+
     if len(pilot_ids) == 0:
         Logger.info('Filtered out all pilots provided...')
         return None
@@ -43,6 +70,7 @@ def main(pilot_names, db):
         affil_ids.append(a.get('alliance_id'))
         affil_ids.append(a.get('corporation_id'))
     db.get_affil_names(affil_ids)
+
     character_stats = []
     for chunk in divide_chunks(pilot_ids, config.MAX_CHUNK):
         statusmsg.push_status("Retrieving killboard data for {}...".format(', '.join([c['char_name'] for c in chunk])))
@@ -63,8 +91,8 @@ def divide_chunks(l, n):
         yield l[i:i + n]
 
 
-async def resolve_pilot_ids(pilot_names, db):
-    coros = [db.get_pilot_id(p) for p in pilot_names]
+async def _resolve_pilot_ids(pilot_names, db):
+    coros = [db.get_pilot_ids(p) for p in pilot_names]
     await asyncio.gather(*coros)
 
 
