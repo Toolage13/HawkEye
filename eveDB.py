@@ -377,7 +377,7 @@ class EveDB:
     def __get_affil_names(self, allcorp_ids):
         allcorp_ids = [i for i in allcorp_ids if i]
         return_values = []
-        self.__local_c.execute("select entity_id, entity_name, last_update from allcorp where entity_id in ({})".format(
+        self.__local_c.execute("select entity_id, entity_name, last_update from entities where entity_id in ({})".format(
             ','.join(['?'] * len(allcorp_ids))), allcorp_ids)
         records = self.__local_c.fetchall()
         if records is not None:
