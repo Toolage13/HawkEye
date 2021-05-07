@@ -7,6 +7,7 @@ This is the GUI file, it has an App class which just displays the Frame, and the
 the details on how the GUI is made. The GUI contains numerous methods for various user interaction responses.
 """
 import aboutdialog
+import analyze
 import config
 import eveDB
 import logging
@@ -14,10 +15,12 @@ import os
 import shutil
 import sortarray
 import statusmsg
+from time import sleep
 import webbrowser
 import wx
 import wx.grid as WXG
 import wx.lib.agw.persist as pm
+import wx.lib.agw.supertooltip as STT
 
 Logger = logging.getLogger(__name__)
 
@@ -173,6 +176,10 @@ class Frame(wx.Frame):
         self.grid.CreateGrid(0, 0)
         self.grid.SetName("Output List")
         # self.grid.ShowScrollbars(wx.SHOW_SB_NEVER, wx.SHOW_SB_NEVER)
+        """ HERE'S ALL THE NEW STUFF ********************************************************************************"""
+        self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self._mouseMove)
+        self.tip = None
+        self.prev_row = None
 
         # The status label shows various info and error messages.
         self.status_label = wx.StaticText(self,
@@ -210,6 +217,27 @@ class Frame(wx.Frame):
 
         # Set transparency based off restored slider
         self.__do_layout()
+
+    def _mouseMove(self, e):
+        ####### TRY
+        x, y = self.grid.CalcUnscrolledPosition(e.GetPosition())
+        row = self.grid.YToRow(y)
+        if row == -1 and self.tip:
+            self.tip.Show(False)
+        if row != self.prev_row and row > -1:
+            if not self.options.Get("outlist")[row].get('losses'):
+                outlist = self.options.Get("outlist")
+                outlist[row]['losses'] = analyze.get_loss_data(self.options.Get("outlist")[row]['pilot_id'],
+                                                               self.options.Get("outlist")[row]['pilot_name'])
+                self.options.Set("outlist", outlist)
+            self.tip = STT.SuperToolTip(str(self.options.Get("outlist")[row]['losses']))
+            self.tip.SetHeader("Hello world")
+            self.tip.SetDrawHeaderLine(True)
+            self.tip.ApplyStyle("Office 2007 Blue")
+            self.tip.SetDropShadow(True)
+            self.tip.SetTarget(self.grid)
+            self.tip.Show(True)
+        self.prev_row = row
 
     def _setKillmailsFast(self, e):
         """

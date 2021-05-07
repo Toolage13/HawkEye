@@ -23,7 +23,6 @@ def watch_clpbd():
     """
     Main app loop, watches clipboard, if valid character names are pasted, call analyze_chars()
     """
-    db = EveDB()
     valid = False
     recent_value = None
     while True:
@@ -37,7 +36,7 @@ def watch_clpbd():
             if valid:
                 statusmsg.push_status("Clipboard change detected...")
                 recent_value = clipboard
-                analyze_chars(clipboard.splitlines(), db)
+                analyze_chars(clipboard.splitlines())
         time.sleep(0.5)  # Short sleep between loops to reduce CPU load
 
 
@@ -55,7 +54,7 @@ def check_name_validity(pilot_name):
     return True
 
 
-def analyze_chars(pilot_names, db):
+def analyze_chars(pilot_names):
     """
     Send list of pilot names to analyze.main() and send it to gui.App.MyFrame.grid.sortOutlist()
     :param pilot_names: List of pilot names to process
@@ -64,7 +63,7 @@ def analyze_chars(pilot_names, db):
     start_time = time.time()
     wx.CallAfter(app.MyFrame.grid.ClearGrid)
     try:
-        outlist, filtered = analyze.main(pilot_names, db)
+        outlist, filtered = analyze.main(pilot_names)
         duration = round(time.time() - start_time, 1)
         if outlist is not None:
             # Need to use keyword args as sortOutlist can also get called

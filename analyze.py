@@ -17,7 +17,7 @@ import time
 Logger = logging.getLogger(__name__)
 
 
-def main(pilot_names, db):
+def main(pilot_names):
     """
     The main method takes the list of pilot_names, filters and then transforms it into a list of dictionaries
     containing pilot data using _filter_pilots(). The list is then broken into chunks of size config.MAX_CHUNK and
@@ -27,26 +27,26 @@ def main(pilot_names, db):
     :param db: The eveDB to use.
     :return character_stats: A list of dictionaries containing expanded pilot data
     """
-    eveDB.fuzzwork_download()  # Need to make sure the files are still there!
-    filtered_pilot_data = _filter_pilots(pilot_names, db)
+    with eveDB.EveDB() as db:
+        filtered_pilot_data = _filter_pilots(pilot_names, db)
 
-    if len(filtered_pilot_data) == 0:
-        Logger.info('Filtered out all pilots provided...')
-        return None
+        if len(filtered_pilot_data) == 0:
+            Logger.info('Filtered out all pilots provided...')
+            return None
 
-    character_stats = []
-    for chunk in divide_chunks(filtered_pilot_data, config.MAX_CHUNK):
-        statusmsg.push_status("Retrieving killboard data for {}...".format(', '.join([c['pilot_name'] for c in chunk])))
-        Logger.info('Running {} pilots through concurrent_run_character(...)'.format(len(chunk)))
-        start_time = time.time()
-        loop = asyncio.new_event_loop()
-        details = loop.run_until_complete(_concurrent_run_character(chunk, db))
-        loop.close()
-        for c in details:
-            character_stats.append(c)
-        statusmsg.push_status('Ran {} pilots in {} seconds.'.format(len(chunk), round(time.time() - start_time, 2)))
-        Logger.info('Ran {} pilots in {} seconds.'.format(len(chunk), round(time.time() - start_time, 2)))
-    return character_stats, len(filtered_pilot_data) - len(pilot_names)
+        character_stats = []
+        for chunk in divide_chunks(filtered_pilot_data, config.MAX_CHUNK):
+            statusmsg.push_status("Retrieving killboard data for {}...".format(', '.join([c['pilot_name'] for c in chunk])))
+            Logger.info('Running {} pilots through concurrent_run_character(...)'.format(len(chunk)))
+            start_time = time.time()
+            loop = asyncio.new_event_loop()
+            details = loop.run_until_complete(_concurrent_run_character(chunk, db))
+            loop.close()
+            for c in details:
+                character_stats.append(c)
+            statusmsg.push_status('Ran {} pilots in {} seconds.'.format(len(chunk), round(time.time() - start_time, 2)))
+            Logger.info('Ran {} pilots in {} seconds.'.format(len(chunk), round(time.time() - start_time, 2)))
+        return character_stats, len(filtered_pilot_data) - len(pilot_names)
 
 
 def _filter_pilots(pilot_names, db):
@@ -161,7 +161,7 @@ async def _get_kill_data(pilot_data, db):
         'wormhole': 0
     }
 
-    zkill_data = await _get_zkill_data(pilot_data['pilot_id'], pilot_data['pilot_name'])
+    zkill_data = await _get_zkill_data('kills', pilot_data['pilot_id'], pilot_data['pilot_name'])
 
     if not zkill_data:
         stats['associates'] = None
@@ -176,7 +176,7 @@ async def _get_kill_data(pilot_data, db):
         stats, merged_kills, db, pilot_data['pilot_id'], pilot_data['corp_id'], pilot_data['alliance_id'])
 
 
-async def _get_zkill_data(pilot_id, pilot_name):
+async def _get_zkill_data(page, pilot_id, pilot_name):
     """
     Request zkillboard page 1 from zkill for pilot_id, retry up to config.ZKILL_RETRY times with a brief delay between
     requests of asyncio.sleep() * config.ZKILL_MULTIPLIER. If the pilot has no zkill, zkill returns an empty list []
@@ -185,7 +185,7 @@ async def _get_zkill_data(pilot_id, pilot_name):
     :param pilot_name: Pilot name
     :return: Data if retrieved, otherwise None
     """
-    url = "https://zkillboard.com/api/kills/characterID/{}/page/{}/".format(pilot_id, 1)
+    url = "https://zkillboard.com/api/{}/characterID/{}/page/{}/".format(page, pilot_id, 1)
     headers = {'Accept-Encoding': 'gzip', 'User-Agent': 'HawkEye, Author: Kain Tarr'}
     statusmsg.push_status('Requesting {}'.format(url))
     Logger.info('Requesting {}'.format(url))
@@ -505,3 +505,22 @@ def _get_associates(associates, db):
             if entity_id == entity['id']:
                 associates[associates.index(entity_id)] = entity['name']
     return associates
+
+
+def get_loss_data(pilot_id, pilot_name):
+    loop = asyncio.new_event_loop()
+    lossmails = loop.run_until_complete(get_merged_loss_killmails(pilot_id, pilot_name))
+    loop.close()
+
+    avg_loss = 0
+    for loss in lossmails:
+        avg_loss += loss['zkb']['totalValue']
+    return avg_loss / len(lossmails)
+
+
+async def get_merged_loss_killmails(pilot_id, pilot_name):
+    zkill_data = await _get_zkill_data('losses', pilot_id, pilot_name)
+    if not zkill_data:
+        return None
+
+    return await _merge_zkill_ccp_kills(zkill_data)
