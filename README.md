@@ -1,11 +1,9 @@
 # HawkEye
 
-A program that makes eve more fun.
+A program that makes EVE more fun.
 
 # Install Instructions
 
 ## Linux
 
-`python setup.py install`
-
-Then run `hawkeye`
+`Contact Darkside nobody cares about Linux boys`

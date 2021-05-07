@@ -5,6 +5,7 @@ This is the big boy that handles all the fetching of data, and analysis of the f
 """
 import asyncio
 from aiohttp import ClientSession
+import eveDB
 import config
 import json
 import logging
@@ -26,6 +27,7 @@ def main(pilot_names, db):
     :param db: The eveDB to use.
     :return character_stats: A list of dictionaries containing expanded pilot data
     """
+    eveDB.fuzzwork_download()  # Need to make sure the files are still there!
     filtered_pilot_data = _filter_pilots(pilot_names, db)
 
     if len(filtered_pilot_data) == 0:
@@ -155,7 +157,7 @@ async def _get_kill_data(pilot_data, db):
         stats['name'] = 'ZKILL-MISSING'
         return stats
 
-    zkill_data = zkill_data[:config.MAX_KM]
+    zkill_data = zkill_data[:config.OPTIONS_OBJECT.Get("maxKillmails", default=50)]
     merged_kills = await _merge_zkill_ccp_kills(zkill_data)
 
     return _prepare_stats(stats, merged_kills, db, pilot_data['pilot_id'])
@@ -191,7 +193,7 @@ async def _get_zkill_data(pilot_id, pilot_name):
                     data = await resp.json()
                 break
             except Exception as e:
-                Logger.error('Failed to get kills page for {} : {}'.format(pilot_name, url))
+                Logger.warning('Failed to get kills page for {} : {}'.format(pilot_name, url))
                 retry += 1
                 await asyncio.sleep(random.random() * config.ZKILL_MULTIPLIER)
     statusmsg.push_status('Requested {} and got it in {} seconds'.format(url, round(time.time() - start_time, 2)))
@@ -392,36 +394,45 @@ def _format_stats(stats, db):
     :param db: EveDB to use
     :return: Enriched stats
     """
+    # Valuations, fleet sizes, and ship types in small or large fleets
     stats['average_kill_value'] = stats['average_kill_value'] / (stats['processed_killmails'] + 0.01)
     stats['average_pilots'] = round(stats['average_pilots'] / (stats['processed_killmails'] + 0.01))
     stats['avg_10'] = round(stats['avg_10'] / (stats['pro_10'] + 0.01))
     stats['avg_gang'] = round(stats['avg_gang'] / (stats['pro_gang'] + 0.01))
+    stats['top_ships'] = ', '.join(
+        s for s in [db.get_ship_name(i) for i in _get_top_three(stats['top_ships'])] if s is not None)
+    stats['top_10_ships'] = ', '.join(
+        s for s in [db.get_ship_name(i) for i in _get_top_three(stats['top_10_ships'])] if s is not None)
+    stats['top_gang_ships'] = ', '.join(
+        s for s in [db.get_ship_name(i) for i in _get_top_three(stats['top_gang_ships'])] if s is not None)
+
+    # Location and timezone
+    stats['top_regions'] = ', '.join(r for r in _get_top_three(stats['top_regions']) if r is not None)
     timezone = 'autz'
     for tz in ['eutz', 'ustz']:
         if stats[tz]['kills'] > stats[timezone]['kills']:
             timezone = tz
-    stats['timezone'] = '{}: {}% ({})'.format(timezone.upper(),
-                                              round(stats[timezone]['kills'] / (stats['processed_killmails'] + 0.01) * 100),
-                                              stats['average_pilots']
-                                              )
-    stats['top_regions'] = ', '.join(r for r in _get_top_three(stats['top_regions']) if r is not None)
-    stats['top_ships'] = ', '.join(s for s in [db.get_ship_name(i) for i in _get_top_three(stats['top_ships'])] if s is not None)
-    stats['top_10_ships'] = ', '.join(s for s in [db.get_ship_name(i) for i in _get_top_three(stats['top_10_ships'])] if s is not None)
-    stats['top_gang_ships'] = ', '.join(s for s in [db.get_ship_name(i) for i in _get_top_three(stats['top_gang_ships'])] if s is not None)
+    stats['timezone'] = '{}: {}% ({})'.format(timezone.upper(), round(
+        stats[timezone]['kills'] / (stats['processed_killmails'] + 0.01) * 100), stats['average_pilots'])
+
+    # Kill attributes (using certain ships etc.)
     stats['cyno'] = stats['cyno'] / (stats['processed_killmails'] + 0.01)
     stats['capital_use'] = stats['capital_use'] / (stats['processed_killmails'] + 0.01)
     stats['blops_use'] = stats['blops_use'] / (stats['processed_killmails'] + 0.01)
     stats['smartbomb'] = stats['smartbomb'] / (stats['processed_killmails'] + 0.01)
-    if stats['blops_use'] > config.BLOPS_HL_PERCENTAGE:
-        stats['warning'] = _add_string(stats['warning'], 'BLOPS')
-    if stats['cyno'] > config.CYNO_HL_PERCENTAGE:
-        stats['warning'] = _add_string(stats['warning'], 'CYNO')
-    if stats['super'] > 0:
-        stats['warning'] = _add_string(stats['warning'], 'SUPER')
+
+    # Populate warnings
     if stats['titan'] > 0:
         stats['warning'] = _add_string(stats['warning'], 'TITAN')
+    if stats['super'] > 0:
+        stats['warning'] = _add_string(stats['warning'], 'SUPER')
     if stats['smartbomb'] > config.SB_HL_PERCENTAGE:
         stats['warning'] = _add_string(stats['warning'], 'SMARTBOMB')
+    if stats['cyno'] > config.CYNO_HL_PERCENTAGE:
+        stats['warning'] = _add_string(stats['warning'], 'CYNO')
+    if stats['blops_use'] > config.BLOPS_HL_PERCENTAGE:
+        stats['warning'] = _add_string(stats['warning'], 'BLOPS')
+
     return stats
 
 

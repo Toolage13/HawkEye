@@ -122,6 +122,23 @@ class Frame(wx.Frame):
         # Options Menubar
         self.opt_menu = wx.Menu()
 
+        self.km_sub = wx.Menu()
+        self.opt_menu.Append(wx.ID_ANY, "Killmail Depth", self.km_sub)
+
+        self.hl_km50 = self.km_sub.AppendCheckItem(wx.ID_ANY, "&50 Killmails (Fast)")
+        self.km_sub.Bind(wx.EVT_MENU, self._setKillmailsFast, self.hl_km50)
+        self.hl_km50.Check(self.options.Get("KM50", True))
+
+        self.hl_km100 = self.km_sub.AppendCheckItem(wx.ID_ANY, "&100 Killmails")
+        self.km_sub.Bind(wx.EVT_MENU, self._setKillmailsMid, self.hl_km100)
+        self.hl_km100.Check(self.options.Get("KM100", False))
+
+        self.hl_km200 = self.km_sub.AppendCheckItem(wx.ID_ANY, "&200 Killmails (Slow)")
+        self.km_sub.Bind(wx.EVT_MENU, self._setKillmailsSlow, self.hl_km200)
+        self.hl_km200.Check(self.options.Get("KM200", False))
+
+        self.opt_menu.AppendSeparator()
+
         self.review_ignore = self.opt_menu.Append(wx.ID_ANY, "&Clear Ignored Entities\tCTRL+R")
         self.opt_menu.Bind(wx.EVT_MENU, self._clearIgnoredEntities, self.review_ignore)
 
@@ -135,6 +152,9 @@ class Frame(wx.Frame):
 
         self.clear_kills = self.opt_menu.Append(wx.ID_ANY, "&Clear Killmail Cache")
         self.opt_menu.Bind(wx.EVT_MENU, self._clear_kill_cache, self.clear_kills)
+
+        self.clear_static = self.opt_menu.Append(wx.ID_ANY, "&Clear Static Data")
+        self.opt_menu.Bind(wx.EVT_MENU, self._clear_static_data, self.clear_static)
 
         self.menubar.Append(self.opt_menu, 'Options')
 
@@ -188,6 +208,45 @@ class Frame(wx.Frame):
 
         # Set transparency based off restored slider
         self.__do_layout()
+
+    def _setKillmailsFast(self, e):
+        """
+        Set killmail option
+        :param e: Required
+        """
+        self.options.Set("KM50", True)
+        self.options.Set("KM100", False)
+        self.options.Set("KM200", False)
+        self.hl_km50.Check(True)
+        self.hl_km100.Check(False)
+        self.hl_km200.Check(False)
+        self.options.Set("maxKillmails", 50)
+
+    def _setKillmailsMid(self, e):
+        """
+        Set killmail option
+        :param e: Required
+        """
+        self.options.Set("KM50", False)
+        self.options.Set("KM100", True)
+        self.options.Set("KM200", False)
+        self.hl_km50.Check(False)
+        self.hl_km100.Check(True)
+        self.hl_km200.Check(False)
+        self.options.Set("maxKillmails", 100)
+
+    def _setKillmailsSlow(self, e):
+        """
+        Set killmail option
+        :param e: Required
+        """
+        self.options.Set("KM50", False)
+        self.options.Set("KM100", False)
+        self.options.Set("KM200", True)
+        self.hl_km50.Check(False)
+        self.hl_km100.Check(False)
+        self.hl_km200.Check(True)
+        self.options.Set("maxKillmails", 200)
 
     def __set_properties(self, dark_toggle=None):
         """
@@ -751,6 +810,14 @@ class Frame(wx.Frame):
         """
         if os.path.exists(os.path.join(config.PREF_PATH, 'kills/')):
             shutil.rmtree(os.path.join(config.PREF_PATH, 'kills/'))
+            os.makedirs(os.path.join(config.PREF_PATH, 'kills/'))
+        statusmsg.push_status("Cleared killmail cache")
+
+    def _clear_static_data(self, e):
+        for file in ['invTypes.csv', 'invGroups.csv', 'mapSolarSystems.csv', 'mapRegions.csv', 'mapDenormalize.csv']:
+            if os.path.exists(os.path.join(config.PREF_PATH, file)):
+                os.remove(os.path.join(config.PREF_PATH, file))
+        statusmsg.push_status("Cleared static data")
 
     def OnClose(self, event=None):
         """

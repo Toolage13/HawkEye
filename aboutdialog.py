@@ -1,3 +1,8 @@
+# !/usr/local/bin/python3.8
+# Github: https://github.com/Toolage13/HawkEye
+"""
+Full credit to White Russsian, most of this was shamelessly stolen from him: https://github.com/Eve-PySpy/PySpy
+"""
 import config
 import logging
 import wx
@@ -8,7 +13,9 @@ Logger = logging.getLogger(__name__)
 
 def showAboutBox(parent, event=None):
     description = """
-    This this is trash!
+    This tool was inspired largely by PySpy and Pirate's Little Helper.
+    Discord: Firehawk#0960
+    IGN: Kain Tarr
     """
 
     try:
@@ -23,7 +30,7 @@ def showAboutBox(parent, event=None):
     # info.SetVersion(config.CURRENT_VER)
     info.SetDescription(description)
     info.SetCopyright('(C) 2021 Kain Tarr')
-    info.SetWebSite('https://github.com/Eve-PySpy/PySpy')
+    info.SetWebSite('https://github.com/Toolage13/HawkEye')
     info.SetLicence(license)
 
     wx.adv.AboutBox(info)

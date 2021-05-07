@@ -6,7 +6,7 @@ clipboard, and then passes validated clipboard data to analyze.py for processing
 analyze.py to gui.py for presentation in the gui.
 """
 import analyze
-from eveDB import eveDB
+from eveDB import EveDB
 import gui
 import logging
 import re
@@ -23,7 +23,7 @@ def watch_clpbd():
     """
     Main app loop, watches clipboard, if valid character names are pasted, call analyze_chars()
     """
-    db = eveDB()
+    db = EveDB()
     valid = False
     recent_value = None
     while True:

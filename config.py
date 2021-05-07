@@ -1,18 +1,35 @@
-import logging.config
+# !/usr/local/bin/python3.8
+# Github: https://github.com/Toolage13/HawkEye
+"""
+Handles version control, static constants, resource paths, config file storage, color schema, and logging.
+"""
 import logging
+import logging.config
 import optstore
 import os
+from pkg_resources import get_distribution, DistributionNotFound
 import platform
 import sys
 import wx  # required for colour codes in DARK_MODE
-from pkg_resources import get_distribution, DistributionNotFound
+
+
+Logger = logging.getLogger(__name__)
 
 try:
     __version__ = get_distribution(__name__).version
 except DistributionNotFound:
     __version__ = "Unknown Version"
 
-Logger = logging.getLogger(__name__)
+# Various constants
+MAX_NAMES = 500  # The max number of char names to be processed
+MAX_KM = 100  # Max number of killmails to process per character
+ZKILL_MULTIPLIER = 1.5
+ZKILL_RETRY = 50
+MAX_CHUNK = 50
+GUI_TITLE = "HawkEye " + __version__
+CYNO_HL_PERCENTAGE = 0.01
+BLOPS_HL_PERCENTAGE = 0.01
+SB_HL_PERCENTAGE = 0.1
 
 
 def resource_path(relative_path):
@@ -51,43 +68,21 @@ elif __file__:
         os.makedirs(PREF_PATH)
     LOG_PATH = PREF_PATH
 
-LOG_FILE = os.path.join(LOG_PATH, "hawkeye.log")
 GUI_CFG_FILE = os.path.join(PREF_PATH, "hawkeye.cfg")
+LOG_FILE = os.path.join(LOG_PATH, "hawkeye.log")
 OPTIONS_FILE = os.path.join(PREF_PATH, "hawkeye.pickle")
-
-# Persistent options object
-OPTIONS_OBJECT = optstore.PersistentOptions(OPTIONS_FILE)
-
-"""if OPTIONS_OBJECT.Get("version", 0) != __version__:
-    print("Config file erased.")
-    try:
-        os.remove(GUI_CFG_FILE)
-    except:
-        pass
-    for key in OPTIONS_OBJECT.ListKeys():
-        if key != "uuid":
-            OPTIONS_OBJECT.Del(key)"""
-
-# Store version information
-OPTIONS_OBJECT.Set("version", __version__)
 
 # Creates /kills folder in PREF_PATH if it doesn't exist
 if not os.path.exists(os.path.join(PREF_PATH, 'kills/')):
     os.makedirs(os.path.join(PREF_PATH, 'kills/'))
 
-# Various constants
-MAX_NAMES = 500  # The max number of char names to be processed
-MAX_KM = 100  # Max number of killmails to process per character
-ZKILL_MULTIPLIER = 1.5
-ZKILL_RETRY = 50
-MAX_CHUNK = 50
-GUI_TITLE = "HawkEye " + __version__
-CYNO_HL_PERCENTAGE = 0.01
-BLOPS_HL_PERCENTAGE = 0.01
-SB_HL_PERCENTAGE = 0.1
+# Persistent options object
+OPTIONS_OBJECT = optstore.PersistentOptions(OPTIONS_FILE)
+
+# Store version information
+OPTIONS_OBJECT.Set("version", __version__)
 
 # Colour Scheme
-
 DARK_MODE = {
     "BG": wx.Colour(0, 0, 0),
     "TXT": wx.Colour(247, 160, 55),  # Yellow
@@ -113,12 +108,13 @@ NORMAL_MODE = {
     }
 
 # Logging setup
-''' For each module that requires logging, make sure to import modules
+"""
+For each module that requires logging, make sure to import modules
 logging and this config. Then get a new logger at the beginning
 of the module like this: "Logger = logging.getLogger(__name__)" and
 produce log messages like this: "Logger.error("text", exc_info=True)"
-'''
-LOG_DETAIL = 'INFO'
+"""
+LOG_DETAIL = 'ERROR'
 
 LOG_DICT = {
     'version': 1,
@@ -131,18 +127,18 @@ LOG_DICT = {
     },
     'handlers': {
         'stream_handler': {
-            'level': 'INFO',
+            'level': LOG_DETAIL,
             'formatter': 'standard',
             'class': 'logging.StreamHandler',
         },
         'file_handler': {
-            'level': 'INFO',
+            'level': LOG_DETAIL,
             'filename': LOG_FILE,
             'class': 'logging.FileHandler',
             'formatter': 'standard'
         },
         'timed_rotating_file_handler': {
-            'level': 'INFO',
+            'level': LOG_DETAIL,
             'filename': LOG_FILE,
             'class': 'logging.handlers.TimedRotatingFileHandler',
             'when': 'D',
@@ -154,7 +150,7 @@ LOG_DICT = {
     'loggers': {
         '': {
             'handlers': ['timed_rotating_file_handler', 'stream_handler'],
-            'level': 'INFO',
+            'level': LOG_DETAIL,
             'propagate': True
         },
     }
