@@ -156,6 +156,7 @@ if wx.Platform == "__WXMSW__":
 # Define a bunch of predefined colour schemes...
 
 _colourSchemes = {
+    "HawkEye": (wx.Colour(75, 75, 75), wx.Colour(125, 125, 125), wx.Colour(75, 75, 75), wx.Colour(200, 200, 200)),
     "Beige": (wx.WHITE, wx.Colour(242, 242, 223), wx.Colour(198, 195, 160), wx.BLACK),
     "Blue": (wx.WHITE, wx.Colour(202, 220, 246), wx.Colour(150, 180, 222), wx.BLACK),
     "Blue 2": (wx.WHITE, wx.Colour(228, 236, 248), wx.Colour(198, 214, 235), wx.BLACK),

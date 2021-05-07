@@ -219,37 +219,46 @@ class Frame(wx.Frame):
         self.__do_layout()
 
     def _mouseMove(self, e):
+        # Static data
         x, y = self.grid.CalcUnscrolledPosition(e.GetPosition())
         row = self.grid.YToRow(y)
-        if row == -1 and self.tip:
+
+        if self.tip:
+            self.tip.SetEndDelay(.001)
+
+        if self.tip and (row == -1 or row != self.prev_row):
             self.tip.Show(False)
-            self.showloss = False
+
+        # if row != self.prev_row and row > -1:
         if row != self.prev_row and row > -1:
-            # Static data
+            # Static setup
             screen_pos = self.GetPosition()
             evtx, evty = e.GetPosition()
             evtx = screen_pos[0] + evtx + 20
             evty = screen_pos[1] + evty + 85
-
-
-
+            font = wx.Font(wx.FontInfo(10).Bold())
+            font.SetPointSize(13)
             # Set up
             self.tip = STT.SuperToolTip("Loading...")
-            self.tip.ApplyStyle("Dark Gray")
+            self.tip.EnableTip(True)
+            self.tip.ApplyStyle("HawkEye")
             self.tip.SetDrawHeaderLine(True)
             self.tip.SetTarget(self.grid.GetGridWindow())
             self.tip.SetHeader(self.options.Get("outlist")[row]['pilot_name'])
+            self.tip.SetHeaderFont(font)
             self.tip.Show(True)
+            # Need to come after tip.Show()
+            self.tip.GetTipWindow().MakeWindowTransparent(217)
+            # Need to be very last
             self.tip.GetTipWindow().setRectWidthHeight(200, 200)
-            self.tip.GetTipWindow().MakeWindowTransparent(166)
             self.tip.GetTipWindow().setRectPosition(evtx, evty)
             self.tip.Update()  # Forces window to draw before calling _populate_popup
 
             # Populate popup window with data
-            self._populate_popup(row)
+            self._populate_popup(row, evtx, evty)
         self.prev_row = row
 
-    def _populate_popup(self, row):
+    def _populate_popup(self, row, x, y):
         # Get lossmail data and add to row if needed
         if not self.options.Get("outlist")[row].get('losses'):
             outlist = self.options.Get("outlist")
@@ -260,6 +269,9 @@ class Frame(wx.Frame):
         # Populate data
         self.tip.SetMessage(str(self.options.Get("outlist")[row].get('losses')))
         self.tip.GetTipWindow().setRectWidthHeight(200, 200)
+        self.tip.GetTipWindow().setRectPosition(x, y)
+        self.tip.Show(True)
+        self.tip.Update()
 
     def _setKillmailsFast(self, e):
         """
