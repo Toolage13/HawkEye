@@ -15,12 +15,12 @@ import os
 import shutil
 import sortarray
 import statusmsg
-from time import sleep
 import webbrowser
 import wx
 import wx.grid as WXG
 import wx.lib.agw.persist as pm
-import wx.lib.agw.supertooltip as STT
+import hawkeyestt as STT
+import win32api
 
 Logger = logging.getLogger(__name__)
 
@@ -219,25 +219,47 @@ class Frame(wx.Frame):
         self.__do_layout()
 
     def _mouseMove(self, e):
-        ####### TRY
         x, y = self.grid.CalcUnscrolledPosition(e.GetPosition())
         row = self.grid.YToRow(y)
         if row == -1 and self.tip:
             self.tip.Show(False)
+            self.showloss = False
         if row != self.prev_row and row > -1:
-            if not self.options.Get("outlist")[row].get('losses'):
-                outlist = self.options.Get("outlist")
-                outlist[row]['losses'] = analyze.get_loss_data(self.options.Get("outlist")[row]['pilot_id'],
-                                                               self.options.Get("outlist")[row]['pilot_name'])
-                self.options.Set("outlist", outlist)
-            self.tip = STT.SuperToolTip(str(self.options.Get("outlist")[row]['losses']))
-            self.tip.SetHeader("Hello world")
+            # Static data
+            screen_pos = self.GetPosition()
+            evtx, evty = e.GetPosition()
+            evtx = screen_pos[0] + evtx + 20
+            evty = screen_pos[1] + evty + 85
+
+
+
+            # Set up
+            self.tip = STT.SuperToolTip("Loading...")
+            self.tip.ApplyStyle("Dark Gray")
             self.tip.SetDrawHeaderLine(True)
-            self.tip.ApplyStyle("Office 2007 Blue")
-            self.tip.SetDropShadow(True)
-            self.tip.SetTarget(self.grid)
+            self.tip.SetTarget(self.grid.GetGridWindow())
+            self.tip.SetHeader(self.options.Get("outlist")[row]['pilot_name'])
             self.tip.Show(True)
+            self.tip.GetTipWindow().setRectWidthHeight(200, 200)
+            self.tip.GetTipWindow().MakeWindowTransparent(166)
+            self.tip.GetTipWindow().setRectPosition(evtx, evty)
+            self.tip.Update()  # Forces window to draw before calling _populate_popup
+
+            # Populate popup window with data
+            self._populate_popup(row)
         self.prev_row = row
+
+    def _populate_popup(self, row):
+        # Get lossmail data and add to row if needed
+        if not self.options.Get("outlist")[row].get('losses'):
+            outlist = self.options.Get("outlist")
+            outlist[row]['losses'] = analyze.get_loss_data(self.options.Get("outlist")[row]['pilot_id'],
+                                                           self.options.Get("outlist")[row]['pilot_name'])
+            self.options.Set("outlist", outlist)
+
+        # Populate data
+        self.tip.SetMessage(str(self.options.Get("outlist")[row].get('losses')))
+        self.tip.GetTipWindow().setRectWidthHeight(200, 200)
 
     def _setKillmailsFast(self, e):
         """
