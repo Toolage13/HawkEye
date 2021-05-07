@@ -59,7 +59,10 @@ def _filter_pilots(pilot_names, db):
     :return: Filtered list
     """
     ignore_list = config.OPTIONS_OBJECT.Get("ignoredList", default=[])
-    filtered_by_name = [p for p in pilot_names if p not in [i[1] for i in ignore_list]]
+    if len(ignore_list) > 0:
+        filtered_by_name = [p for p in pilot_names if p not in [i[1] for i in ignore_list]]
+    else:
+        filtered_by_name = pilot_names
     if len(filtered_by_name) == 0:
         return []
 
