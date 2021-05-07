@@ -157,7 +157,9 @@ async def _get_kill_data(pilot_data, db):
     zkill_data = await _get_zkill_data(pilot_data['pilot_id'], pilot_data['pilot_name'])
 
     if not zkill_data:
-        stats['name'] = 'ZKILL-MISSING'
+        stats['associates'] = None
+        stats['top_space'] = None
+
         return stats
 
     zkill_data = zkill_data[:config.OPTIONS_OBJECT.Get("maxKillmails", default=50)]
@@ -426,10 +428,11 @@ def _format_stats(stats, db):
             timezone = tz
     stats['timezone'] = '{}: {}% ({})'.format(timezone.upper(), round(
         stats[timezone]['kills'] / (stats['processed_killmails'] + 0.01) * 100), stats['average_pilots'])
+
     space_types = [t for t in ['highsec', 'lowsec', 'nullsec', 'wormhole'] if t in stats['top_space'].keys()]
     activity = space_types[0]
     for space in space_types:
-        if stats['top_space'].get(activity) > stats['top_space'].get(space):
+        if stats['top_space'].get(space) > stats['top_space'].get(activity):
             activity = space
     stats['top_space'] = '{}{} ({}%)'.format(activity[0].upper(), activity[1:], round(
         stats['top_space'][activity] / (stats['processed_killmails'] + 0.01) * 100))

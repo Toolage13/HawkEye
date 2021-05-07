@@ -172,7 +172,7 @@ class Frame(wx.Frame):
         self.grid = wx.grid.Grid(self, wx.ID_ANY)
         self.grid.CreateGrid(0, 0)
         self.grid.SetName("Output List")
-        self.grid.ShowScrollbars(wx.SHOW_SB_NEVER, wx.SHOW_SB_NEVER)
+        # self.grid.ShowScrollbars(wx.SHOW_SB_NEVER, wx.SHOW_SB_NEVER)
 
         # The status label shows various info and error messages.
         self.status_label = wx.StaticText(self,
