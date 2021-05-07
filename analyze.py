@@ -407,7 +407,7 @@ def _format_stats(stats, db):
         s for s in [db.get_ship_name(i) for i in _get_top_three(stats['top_gang_ships'])] if s is not None)
 
     # Location and timezone
-    stats['top_regions'] = ', '.join(r for r in _get_top_three(stats['top_regions']) if r is not None)
+    stats['top_regions'] = ', '.join(r for r in _get_top_three(stats['top_regions']) if r not in [None, ''])
     timezone = 'autz'
     for tz in ['eutz', 'ustz']:
         if stats[tz]['kills'] > stats[timezone]['kills']:
