@@ -63,9 +63,14 @@ def _filter_pilots(pilot_names, db):
     if len(filtered_by_name) == 0:
         return []
 
+    start_time = time.time()
+    Logger.info('Retrieving {} pilot IDs from CCP...'.format(len(filtered_by_name)))
+    statusmsg.push_status('Retrieving {} pilot IDs from CCP...'.format(len(filtered_by_name)))
     loop = asyncio.new_event_loop()
     pilot_map = loop.run_until_complete(_get_pilot_ids(filtered_by_name, db))
     loop.close()
+    logging.info('Retrieved {} pilot IDs from CCP in {} seconds.'.format(round(time.time() - start_time, 2)))
+    statusmsg.push_status('Retrieved {} pilot IDs from CCP in {} seconds.'.format(round(time.time() - start_time, 2)))
 
     pilot_affiliations = db.get_pilot_affiliations([p for p in pilot_map if p is not None])
     return [p for p in pilot_affiliations if p['corp_id'] not in [i[0] for i in ignore_list] and
