@@ -1,6 +1,12 @@
+# !/usr/local/bin/python3.8
+# Github: https://github.com/Toolage13/HawkEye
+"""
+This is the main .py file that is called for HawkEye. It launches a background thread to monitor and validate the
+clipboard, and then passes validated clipboard data to analyze.py for processing. Then it passes the result data from
+analyze.py to gui.py for presentation in the gui.
+"""
 import analyze
-import config
-from eveDB import eveDB
+from eveDB import EveDB
 import gui
 import logging
 import re
@@ -14,14 +20,17 @@ Logger = logging.getLogger(__name__)
 
 
 def watch_clpbd():
-    db = eveDB()
+    """
+    Main app loop, watches clipboard, if valid character names are pasted, call analyze_chars()
+    """
+    db = EveDB()
     valid = False
     recent_value = None
     while True:
         clipboard = pyperclip.paste()
         if clipboard != recent_value:
-            char_names = clipboard.splitlines()
-            for name in char_names:
+            pilot_names = clipboard.splitlines()
+            for name in pilot_names:
                 valid = check_name_validity(name)
                 if valid is False:
                     break
@@ -32,41 +41,41 @@ def watch_clpbd():
         time.sleep(0.5)  # Short sleep between loops to reduce CPU load
 
 
-def check_name_validity(char_name):
-    if len(char_name) < 3:
+def check_name_validity(pilot_name):
+    """
+    Check if a name matches regex below
+    :param pilot_name: The character name to check
+    :return: Boolean of name validity
+    """
+    if len(pilot_name) < 3:
         return False
     regex = r"[^ 'a-zA-Z0-9-]"  # Valid EVE Online character names
-    if re.search(regex, char_name):
+    if re.search(regex, pilot_name):
         return False
     return True
 
 
-def analyze_chars(char_names, db):
+def analyze_chars(pilot_names, db):
+    """
+    Send list of pilot names to analyze.main() and send it to gui.App.MyFrame.grid.sortOutlist()
+    :param pilot_names: List of pilot names to process
+    :param db: EveDB object to use for local queries
+    """
     start_time = time.time()
-    wx.CallAfter(app.PySpy.grid.ClearGrid)
+    wx.CallAfter(app.MyFrame.grid.ClearGrid)
     try:
-        statusmsg.push_status('About to run analyze.main()...')
-        outlist, filtered = analyze.main(char_names, db)
+        outlist, filtered = analyze.main(pilot_names, db)
         duration = round(time.time() - start_time, 1)
         if outlist is not None:
             # Need to use keyword args as sortOutlist can also get called
             # by event handler which would pass event object as first argument.
-            wx.CallAfter(
-                app.PySpy.sortOutlist,
-                outlist=outlist,
-                duration=duration,
-                filtered=filtered
-                )
+            wx.CallAfter(app.MyFrame.sortOutlist, outlist=outlist, duration=duration, filtered=filtered)
         else:
             statusmsg.push_status("No valid character names found. Please try again...")
     except Exception:
-        Logger.error(
-            "Failed to collect character information. Clipboard "
-            "content was: " + str(char_names), exc_info=True
-        )
+        Logger.error("Failed to collect character information. Clipboard content was: {}".format(str(pilot_names)), exc_info=True)
 
 
-config.OPTIONS_OBJECT.Set("ignoredList", [])
 app = gui.App(0)
 background_thread = threading.Thread(target=watch_clpbd, daemon=True)
 background_thread.start()
