@@ -362,7 +362,7 @@ class EveDB:
             for key in ['corp_id', 'alliance_id']:
                 if pilot[key] is not None:
                     corpall_ids.append(pilot[key])
-        affiliation_names = self.__get_affil_names(corpall_ids)
+        affiliation_names = self.get_affil_names(corpall_ids)
 
         # Add corp and alliance names to affiliations using _get_affil_names mapping results
         for pilot in pilot_map:
@@ -374,7 +374,7 @@ class EveDB:
 
         return pilot_map
 
-    def __get_affil_names(self, allcorp_ids):
+    def get_affil_names(self, allcorp_ids):
         allcorp_ids = [i for i in allcorp_ids if i]
         return_values = []
         self.__local_c.execute("select entity_id, entity_name, last_update from entities where entity_id in ({})".format(

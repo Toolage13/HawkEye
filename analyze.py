@@ -67,8 +67,9 @@ def _filter_pilots(pilot_names, db):
     pilot_map = loop.run_until_complete(_get_pilot_ids(filtered_by_name, db))
     loop.close()
 
-    pilot_affiliations = db.get_pilot_affiliations(pilot_map)
-    return [p for p in pilot_affiliations if p['corp_id'] not in [i[0] for i in ignore_list] and p['alliance_id'] not in [i[0] for i in ignore_list]]
+    pilot_affiliations = db.get_pilot_affiliations([p for p in pilot_map if p is not None])
+    return [p for p in pilot_affiliations if p['corp_id'] not in [i[0] for i in ignore_list] and
+            p['alliance_id'] not in [i[0] for i in ignore_list]]
 
 
 async def _get_pilot_ids(pilot_names, db):
@@ -82,15 +83,15 @@ async def _get_pilot_ids(pilot_names, db):
     return await asyncio.gather(*coros)
 
 
-def divide_chunks(l, n):
+def divide_chunks(my_list, n):
     """
     Divide a list l into chunks of n size, yield each list as iterated
-    :param l: Original list
+    :param my_list: Original list
     :param n: Size of chunks
     :yield: Each chunk
     """
-    for i in range(0, len(l), n):
-        yield l[i:i + n]
+    for i in range(0, len(my_list), n):
+        yield my_list[i:i + n]
 
 
 async def _concurrent_run_character(pilot_chunk, db):
@@ -116,6 +117,7 @@ async def _get_kill_data(pilot_data, db):
     stats = {
         'alliance_id': pilot_data['alliance_id'],
         'alliance_name': pilot_data['alliance_name'],
+        'associates': {},
         'autz': {'kills': 0.01, 'attackers': 0},
         'average_kill_value': 0,
         'average_pilots': 0,
@@ -146,6 +148,7 @@ async def _get_kill_data(pilot_data, db):
         'top_gang_ships': None,
         'top_regions': None,
         'top_ships': None,
+        'top_space': {},
         'ustz': {'kills': 0.01, 'attackers': 0},
         'warning': '',
         'wormhole': 0
@@ -160,7 +163,8 @@ async def _get_kill_data(pilot_data, db):
     zkill_data = zkill_data[:config.OPTIONS_OBJECT.Get("maxKillmails", default=50)]
     merged_kills = await _merge_zkill_ccp_kills(zkill_data)
 
-    return _prepare_stats(stats, merged_kills, db, pilot_data['pilot_id'])
+    return _prepare_stats(
+        stats, merged_kills, db, pilot_data['pilot_id'], pilot_data['corp_id'], pilot_data['alliance_id'])
 
 
 async def _get_zkill_data(pilot_id, pilot_name):
@@ -234,8 +238,10 @@ async def _merge_zkill_ccp_kills(data):
                 ccp_kills.append(att)
 
             results = await asyncio.gather(*ccp_kills)
-        statusmsg.push_status('Gathered {} killmails from CCP servers in {} seconds'.format(len(data), round(time.time() - start_time, 2)))
-        Logger.info('Gathered {} killmails from CCP servers in {} seconds'.format(len(data), round(time.time() - start_time, 2)))
+        statusmsg.push_status('Gathered {} killmails from CCP servers in {} seconds'.format(
+            len(data), round(time.time() - start_time, 2)))
+        Logger.info('Gathered {} killmails from CCP servers in {} seconds'.format(
+            len(data), round(time.time() - start_time, 2)))
 
         for zkill in data:
             for ccpkill in results:
@@ -250,7 +256,7 @@ async def _merge_zkill_ccp_kills(data):
                 except Exception as e:
                     Logger.error(zkill)
                     Logger.error(ccpkill)
-                    raise(e)
+                    raise e
     return result_killmails
 
 
@@ -267,33 +273,33 @@ def _fetch_local(killmail_id):
         return None
 
 
-async def _fetch(killmail_id, hash, session):
+async def _fetch(killmail_id, killhash, session):
     """
     Fetch killmail from CCP servers.
     :param killmail_id: Killmail ID
-    :param hash: Killmail hash
+    :param killhash: Killmail hash
     :param session: Session to use
     :return: json response parsed into dictionary
     """
 
-    url = "https://esi.evetech.net/v1/killmails/{}/{}/?datasource=tranquility".format(killmail_id, hash)
+    url = "https://esi.evetech.net/v1/killmails/{}/{}/?datasource=tranquility".format(killmail_id, killhash)
     while True:
-            async with session.get(url) as response:
-                r = await response.read()
-                try:
-                    j = json.loads(r)
-                except json.decoder.JSONDecodeError:
-                    await asyncio.sleep(0.25)
-                    continue
-                if j.get('error'):
-                    await asyncio.sleep(0.25)
-                    continue
-                with open(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(killmail_id)), 'w') as file:
-                    json.dump(j, file)
-                return j
+        async with session.get(url) as response:
+            r = await response.read()
+            try:
+                j = json.loads(r)
+            except json.decoder.JSONDecodeError:
+                await asyncio.sleep(0.25)
+                continue
+            if j.get('error'):
+                await asyncio.sleep(0.25)
+                continue
+            with open(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(killmail_id)), 'w') as file:
+                json.dump(j, file)
+            return j
 
 
-def _prepare_stats(stats, killmails, db, pilot_id):
+def _prepare_stats(stats, killmails, db, pilot_id, corp_id, alliance_id):
     """
     Process a list of killmails stored as dictionaries, assign a lot of attributes to stats, then pass to
     _format_stats() for final calculations.
@@ -304,9 +310,7 @@ def _prepare_stats(stats, killmails, db, pilot_id):
     :return: Enriched stats
     """
     for killmail in killmails:
-        # General
         stats['processed_killmails'] += 1
-
         # Valuations, fleet sizes, and ship types in small or large fleets
         stats['average_kill_value'] += float(killmail['zkb']['totalValue'])
         stats['average_pilots'] += len(killmail['attackers'])
@@ -329,12 +333,13 @@ def _prepare_stats(stats, killmails, db, pilot_id):
 
         # Location and timezone
         stats['top_regions'] = _add_to_dict(stats['top_regions'], db.get_region(killmail['solar_system_id']))
-        stats[db.get_location(killmail['solar_system_id'])] += 1
+        stats['top_space'] = _add_to_dict(stats['top_space'], db.get_location(killmail['solar_system_id']))
         stats[_get_timezone(killmail['killmail_time'])]['kills'] += 1
         stats[_get_timezone(killmail['killmail_time'])]['attackers'] += len(killmail['attackers'])
 
         # Kill attributes (using certain ships etc.)
-        if db.killed_on_gate(killmail) and not(db.used_capital(killmail['attackers'], pilot_id)) and not(db.used_blops(killmail['attackers'], pilot_id)):
+        if db.killed_on_gate(killmail) and not(db.used_capital(killmail['attackers'], pilot_id)) and not(
+                db.used_blops(killmail['attackers'], pilot_id)):
             stats['boy_scout'] += 1  # Gatecamping
         if db.used_cyno(killmail['attackers'], pilot_id):
             stats['cyno'] += 1
@@ -349,40 +354,47 @@ def _prepare_stats(stats, killmails, db, pilot_id):
         if db.used_titan(killmail['attackers'], pilot_id):
             stats['titan'] += 1
 
+        # Associates
+        for attacker in killmail['attackers']:
+            if attacker.get('character_id') is not None and attacker.get('character_id') != pilot_id and attacker.get(
+                    'corp_id') != corp_id and attacker.get('alliance_id') != alliance_id:
+                _add_to_dict(stats['associates'], attacker.get('alliance_id') if attacker.get(
+                    'alliance_id') else attacker['corporation_id'])
+
     return _format_stats(stats, db)
 
 
-def _add_to_dict(dict, key):
+def _add_to_dict(my_dict, key):
     """
     Add 1 to a key if it exists in a dictionary, otherwise add it as a new key with value 1 to the dictionary, and
     return the dictionary.
-    :param dict: Original dictionary
+    :param my_dict: Original dictionary
     :param key: Key to update/add
     :return: Return the updated dictionary
     """
     try:
-        if dict.get(key):
-            dict[key] += 1
+        if my_dict.get(key):
+            my_dict[key] += 1
         else:
-            dict[key] = 1
+            my_dict[key] = 1
     except AttributeError:
         return {key: 1}
-    return dict
+    return my_dict
 
 
-def _get_timezone(time):
+def _get_timezone(my_time):
     """
     Take a string timezone with CCP's weird formatting, determine timezone by the hour of the kill:
     00:00 - 06:00 USTZ
     06:00 - 14:00 AUTZ
     14:00 - 00:00 EUTZ
-    :param time: Input time string
+    :param my_time: Input time string
     :return: Timezone
     """
-    time = time.split('T')[1].split(':')
-    if int(time[0]) < 6:
+    my_time = my_time.split('T')[1].split(':')
+    if int(my_time[0]) < 6:
         return 'ustz'
-    if int(time[0]) < 14:
+    if int(my_time[0]) < 14:
         return 'autz'
     return 'eutz'
 
@@ -414,6 +426,13 @@ def _format_stats(stats, db):
             timezone = tz
     stats['timezone'] = '{}: {}% ({})'.format(timezone.upper(), round(
         stats[timezone]['kills'] / (stats['processed_killmails'] + 0.01) * 100), stats['average_pilots'])
+    space_types = [t for t in ['highsec', 'lowsec', 'nullsec', 'wormhole'] if t in stats['top_space'].keys()]
+    activity = space_types[0]
+    for space in space_types:
+        if stats['top_space'].get(activity) > stats['top_space'].get(space):
+            activity = space
+    stats['top_space'] = '{}{} ({}%)'.format(activity[0].upper(), activity[1:], round(
+        stats['top_space'][activity] / (stats['processed_killmails'] + 0.01) * 100))
 
     # Kill attributes (using certain ships etc.)
     stats['cyno'] = stats['cyno'] / (stats['processed_killmails'] + 0.01)
@@ -433,6 +452,9 @@ def _format_stats(stats, db):
     if stats['blops_use'] > config.BLOPS_HL_PERCENTAGE:
         stats['warning'] = _add_string(stats['warning'], 'BLOPS')
 
+    # Associates
+    stats['associates'] = _get_associates(stats['associates'], db)
+    stats['associates'] = ', '.join(n for n in stats['associates'])
     return stats
 
 
@@ -463,3 +485,13 @@ def _add_string(o, n):
     if o == '':
         return n
     return '{} + {}'.format(o, n)
+
+
+def _get_associates(associates, db):
+    associates = _get_top_three(associates)
+    affil_names = db.get_affil_names(associates)
+    for entity_id in associates:
+        for entity in affil_names:
+            if entity_id == entity['id']:
+                associates[associates.index(entity_id)] = entity['name']
+    return associates
