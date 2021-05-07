@@ -127,6 +127,10 @@ class Frame(wx.Frame):
         # Options Menubar
         self.opt_menu = wx.Menu()
 
+        self.pop = self.opt_menu.AppendCheckItem(wx.ID_ANY, "&Populate All Fields\tCTRL+P")
+        self.opt_menu.Bind(wx.EVT_MENU, self._setPopulate, self.pop)
+        self.pop.Check(self.options.Get("pop", False))
+
         self.km_sub = wx.Menu()
         self.opt_menu.Append(wx.ID_ANY, "Killmail Depth", self.km_sub)
 
@@ -176,7 +180,6 @@ class Frame(wx.Frame):
         self.grid.CreateGrid(0, 0)
         self.grid.SetName("Output List")
         # self.grid.ShowScrollbars(wx.SHOW_SB_NEVER, wx.SHOW_SB_NEVER)
-        """ HERE'S ALL THE NEW STUFF ********************************************************************************"""
         self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self._mouseMove)
         self.tip = None
         self.prev_row = None
@@ -259,6 +262,13 @@ class Frame(wx.Frame):
         self.prev_row = row
 
     def _populate_popup(self, row, x, y):
+        # Get killmail data and add to row if needed
+        if not self.options.Get("outlist")[row]['warning']:  # Warning of None means it wasn't run
+            outlist = self.options.Get("outlist")
+            outlist[row] = analyze.main([outlist[row]['pilot_name']], True)[0][0]
+            self.options.Set("outlist", outlist)
+            self.updateList(self.options.Get("outlist", None))
+
         # Get lossmail data and add to row if needed
         if not self.options.Get("outlist")[row].get('losses'):
             outlist = self.options.Get("outlist")
@@ -272,6 +282,14 @@ class Frame(wx.Frame):
         self.tip.GetTipWindow().setRectPosition(x, y)
         self.tip.Show(True)
         self.tip.Update()
+
+    def _setPopulate(self, e):
+        if self.options.Get("pop", False):
+            self.pop.Check(False)
+            self.options.Set("pop", False)
+        else:
+            self.pop.Check(True)
+            self.options.Set("pop", True)
 
     def _setKillmailsFast(self, e):
         """

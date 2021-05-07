@@ -6,7 +6,7 @@ clipboard, and then passes validated clipboard data to analyze.py for processing
 analyze.py to gui.py for presentation in the gui.
 """
 import analyze
-from eveDB import EveDB
+import config
 import gui
 import logging
 import re
@@ -63,7 +63,7 @@ def analyze_chars(pilot_names):
     start_time = time.time()
     wx.CallAfter(app.MyFrame.grid.ClearGrid)
     try:
-        outlist, filtered = analyze.main(pilot_names)
+        outlist, filtered = analyze.main(pilot_names, config.OPTIONS_OBJECT.Get("pop", False))
         duration = round(time.time() - start_time, 1)
         if outlist is not None:
             # Need to use keyword args as sortOutlist can also get called

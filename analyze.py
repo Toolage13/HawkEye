@@ -17,7 +17,7 @@ import time
 Logger = logging.getLogger(__name__)
 
 
-def main(pilot_names):
+def main(pilot_names, populate_all):
     """
     The main method takes the list of pilot_names, filters and then transforms it into a list of dictionaries
     containing pilot data using _filter_pilots(). The list is then broken into chunks of size config.MAX_CHUNK and
@@ -29,6 +29,11 @@ def main(pilot_names):
     """
     with eveDB.EveDB() as db:
         filtered_pilot_data = _filter_pilots(pilot_names, db)
+        if not populate_all:
+            character_stats = []
+            for pilot in filtered_pilot_data:
+                character_stats.append(_get_stats_dictionary(pilot, True))
+            return character_stats, len(filtered_pilot_data) - len(pilot_names)
 
         if len(filtered_pilot_data) == 0:
             Logger.info('Filtered out all pilots provided...')
@@ -90,37 +95,7 @@ async def _get_pilot_ids(pilot_names, db):
     return await asyncio.gather(*coros)
 
 
-def divide_chunks(my_list, n):
-    """
-    Divide a list l into chunks of n size, yield each list as iterated
-    :param my_list: Original list
-    :param n: Size of chunks
-    :yield: Each chunk
-    """
-    for i in range(0, len(my_list), n):
-        yield my_list[i:i + n]
-
-
-async def _concurrent_run_character(pilot_chunk, db):
-    """
-    Run pilot_data p through _get_kill_data() asynchronously and assemble all expanded pilot data via asyncio.gather()
-    :param pilot_chunk: List of pilot data stored as dictionaries
-    :param db: EveDB to use
-    :return: List of dictionaries containing expanded pilot data
-    """
-    coros = [_get_kill_data(p, db) for p in pilot_chunk]
-    return await asyncio.gather(*coros)
-
-
-async def _get_kill_data(pilot_data, db):
-    """
-    Return zkill data for pilot using _get_zkill_data(). Merge with kill data from CCP fetched with
-    _merge_zkill_ccp_kills(). Finally, pass to _prepare_stats() for final processing and then return
-    :param pilot_data: Dictionary of pilot data
-    :param db: EveDB object to use
-    :return: Dictionary of expanded pilot data
-    """
-    Logger.info('Getting kill data for {}.'.format(pilot_data['pilot_name']))
+def _get_stats_dictionary(pilot_data, ret_blank=False):
     stats = {
         'alliance_id': pilot_data['alliance_id'],
         'alliance_name': pilot_data['alliance_name'],
@@ -160,6 +135,46 @@ async def _get_kill_data(pilot_data, db):
         'warning': '',
         'wormhole': 0
     }
+    if ret_blank:
+        stats['associates'] = None
+        stats['buttbuddies'] = None
+        stats['top_space'] = None
+        stats['warning'] = None
+    return stats
+
+
+def divide_chunks(my_list, n):
+    """
+    Divide a list l into chunks of n size, yield each list as iterated
+    :param my_list: Original list
+    :param n: Size of chunks
+    :yield: Each chunk
+    """
+    for i in range(0, len(my_list), n):
+        yield my_list[i:i + n]
+
+
+async def _concurrent_run_character(pilot_chunk, db):
+    """
+    Run pilot_data p through _get_kill_data() asynchronously and assemble all expanded pilot data via asyncio.gather()
+    :param pilot_chunk: List of pilot data stored as dictionaries
+    :param db: EveDB to use
+    :return: List of dictionaries containing expanded pilot data
+    """
+    coros = [_get_kill_data(p, db) for p in pilot_chunk]
+    return await asyncio.gather(*coros)
+
+
+async def _get_kill_data(pilot_data, db):
+    """
+    Return zkill data for pilot using _get_zkill_data(). Merge with kill data from CCP fetched with
+    _merge_zkill_ccp_kills(). Finally, pass to _prepare_stats() for final processing and then return
+    :param pilot_data: Dictionary of pilot data
+    :param db: EveDB object to use
+    :return: Dictionary of expanded pilot data
+    """
+    Logger.info('Getting kill data for {}.'.format(pilot_data['pilot_name']))
+    stats = _get_stats_dictionary(pilot_data)
 
     zkill_data = await _get_zkill_data('kills', pilot_data['pilot_id'], pilot_data['pilot_name'])
 
@@ -522,5 +537,7 @@ async def get_merged_loss_killmails(pilot_id, pilot_name):
     zkill_data = await _get_zkill_data('losses', pilot_id, pilot_name)
     if not zkill_data:
         return None
+
+    zkill_data = zkill_data[:config.OPTIONS_OBJECT.Get("maxKillmails", default=50)]
 
     return await _merge_zkill_ccp_kills(zkill_data)
