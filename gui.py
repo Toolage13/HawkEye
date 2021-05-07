@@ -15,6 +15,7 @@ import os
 import shutil
 import sortarray
 import statusmsg
+import time
 import webbrowser
 import wx
 import wx.grid as WXG
@@ -222,6 +223,8 @@ class Frame(wx.Frame):
         self.__do_layout()
 
     def _mouseMove(self, e):
+        if config.OPTIONS_OBJECT.Set("show_popup", False):
+            return
         # Static data
         x, y = self.grid.CalcUnscrolledPosition(e.GetPosition())
         row = self.grid.YToRow(y)
@@ -258,16 +261,20 @@ class Frame(wx.Frame):
             self.tip.Update()  # Forces window to draw before calling _populate_popup
 
             # Populate popup window with data
+            start_time = time.time()
             self._populate_popup(row, evtx, evty)
+            statusmsg.push_status("Loaded details for {} in {} seconds".format(
+                self.options.Get("outlist")[row]['pilot_name'], round(time.time() - start_time, 2)))
+
         self.prev_row = row
 
     def _populate_popup(self, row, x, y):
         # Get killmail data and add to row if needed
-        if not self.options.Get("outlist")[row]['warning']:  # Warning of None means it wasn't run
+        if self.options.Get("outlist")[row]['warning'] is None:  # Warning of None means it wasn't run
             outlist = self.options.Get("outlist")
             outlist[row] = analyze.main([outlist[row]['pilot_name']], True)[0][0]
             self.options.Set("outlist", outlist)
-            self.updateList(self.options.Get("outlist", None))
+            self.updateList(self.options.Get("outlist"))
 
         # Get lossmail data and add to row if needed
         if not self.options.Get("outlist")[row].get('losses'):
@@ -275,7 +282,6 @@ class Frame(wx.Frame):
             outlist[row]['losses'] = analyze.get_loss_data(self.options.Get("outlist")[row]['pilot_id'],
                                                            self.options.Get("outlist")[row]['pilot_name'])
             self.options.Set("outlist", outlist)
-
         # Populate data
         self.tip.SetMessage(str(self.options.Get("outlist")[row].get('losses')))
         self.tip.GetTipWindow().setRectWidthHeight(200, 200)

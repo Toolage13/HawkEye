@@ -28,6 +28,7 @@ def watch_clpbd():
     while True:
         clipboard = pyperclip.paste()
         if clipboard != recent_value:
+            config.OPTIONS_OBJECT.Set("show_popup", False)
             pilot_names = clipboard.splitlines()
             for name in pilot_names:
                 valid = check_name_validity(name)
@@ -69,6 +70,7 @@ def analyze_chars(pilot_names):
             # Need to use keyword args as sortOutlist can also get called
             # by event handler which would pass event object as first argument.
             wx.CallAfter(app.MyFrame.sortOutlist, outlist=outlist, duration=duration, filtered=filtered)
+            config.OPTIONS_OBJECT.Set("show_popup", False)
         else:
             statusmsg.push_status("No valid character names found. Please try again...")
     except Exception:
