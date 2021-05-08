@@ -243,7 +243,7 @@ class Frame(wx.Frame):
             evty = screen_pos[1] + evty + 85
             self.tip = PilotFrame(self, -1,
                                   self.options.Get("outlist")[row]['pilot_name'],
-                                  size=(270, 200),
+                                  size=(360, 400),
                                   style=wx.TRANSPARENT_WINDOW,
                                   pos=(evtx, evty)
                                   )
@@ -929,7 +929,8 @@ class PilotFrame(wx.Frame):
     def __init__(self, *args, **kw):
         wx.Frame.__init__(self, *args, **kw)
         self.width = self.GetRect()[2]
-        self.panel = wx.Panel(self, size=(self.width, 200))
+        self.height = self.GetRect()[3]
+        self.panel = wx.Panel(self, size=(self.width, self.height))
         self.panel.SetBackgroundColour((25, 25, 25))
         self.cur_y = 0
 
@@ -937,23 +938,18 @@ class PilotFrame(wx.Frame):
         rtc = rt.RichTextCtrl(self.panel, size=(self.width / 2, 30), style=wx.NO_BORDER, pos=(x, 0))
         rtc.EnableVerticalScrollbar(False)
         rtc.SetCaret(None)
-        rtc.SetBackgroundColour((25, 25, 25))
+        rtc.SetBackgroundColour((30, 60, 120))
 
         rtc.Freeze()
         rtc.BeginSuppressUndo()
 
         rtc.BeginBold()
-        rtc.BeginFontSize(10)
-        rtc.BeginTextColour((62, 157, 250))
+        rtc.BeginFontSize(11)
+        rtc.BeginTextColour((255, 255, 255))
         rtc.BeginAlignment(alignment)
 
         rtc.WriteText(txt)
         rtc.Newline()
-
-        rtc.EndBold()
-        rtc.EndFontSize()
-        rtc.EndTextColour()
-        rtc.EndAlignment()
 
         rtc.EndSuppressUndo()
         rtc.Thaw()
@@ -964,30 +960,41 @@ class PilotFrame(wx.Frame):
         self.cur_y += 30
 
     def write_popup(self, stats):
+        self._write_row("Average Kill: {}{}".format(round(stats['average_kill_value'] / 1000000), "M"), 2, 0)
+        self._write_row("Average Loss: {}{}".format(round(stats['losses']['average_loss_value'] / 1000000), "M"), 1, self.width / 2, 20)
         self._write_header("Tags")
         warn = stats['warning'].split(' + ')
         if warn is None:
-            self._write_row('')
+            self._write_row('', 1, 0, 20)
         else:
             for w in warn:
-                print(self.width / len(warn) * warn.index(w))
-                self._write_row_block(w, len(warn), self.width / len(warn) * warn.index(w))
+                self._write_row(w, len(warn), self.width / len(warn) * warn.index(w))
             self.cur_y += 20
 
         self._write_header("Details")
-        self._write_row_block("Average Attackers: {}".format(stats['average_pilots']), 2, 0)
-        self._write_row_block("Timezone: {}".format(stats['timezone']), 2, self.width / 2)
-        self.cur_y += 20
-        self._write_row_block("Last Activity: {} days".format(stats['last_kill']), 2, 0)
-        self._write_row_block("Last Ship: {}".format('PLACEHOLDER'), 2, self.width / 2)
-        self.cur_y += 20
+        self._write_row("Space: {}".format(stats['top_space']), 2, 0)
+        self._write_row("Timezone: {}".format(stats['timezone']), 2, self.width / 2, 20)
+        self._write_row("Average Fleet: {}".format(stats['avg_10']), 2, 0)
+        self._write_row("Average Gang: {}".format(stats['avg_gang']), 2, self.width / 2, 20)
+        self._write_row("Last Activity: {} days".format(stats['last_kill']), 2, 0)
+        self._write_row("Last Ship: {}".format(stats['last_used_ship']), 2, self.width / 2, 20)
+        self._write_row("Top Regions: {}".format(stats['top_regions']), 1, 0, 20)
 
         self._write_header("Associations")
         if stats['associates'] is None:
-            self._write_row('')
+            self._write_row('', 1, 0, 20)
         else:
             for a in stats['associates'].split(', '):
-                self._write_row(a)
+                self._write_row(a, 1, 0, 20)
+
+        self._write_header("Favorite Ships")
+        self._write_row("Top Losses: {}".format(stats['losses']['top_ships']), 1, 0, 20)
+        self._write_row("Fleet Ships: {}".format(stats['top_10_ships']), 1, 0, 20)
+        self._write_row("Gang Ships: {}".format(stats['top_gang_ships']), 1, 0, 20)
+
+        self._write_header("Fetch Time")
+        self._write_row("Retrieved in {} seconds.".format(
+            round(stats['process_time'] + stats['losses']['process_time'], 2)), 1, 0, 20)
 
         """
                 ', '.join(stats['warning'].replace(' ', '').split(' + ')[:2]),
@@ -1002,7 +1009,7 @@ class PilotFrame(wx.Frame):
         """
 
     def _write_header(self, header):
-        rtc = rt.RichTextCtrl(self.panel, size=(self.width, 17), style=wx.NO_BORDER, pos=(0, self.cur_y))
+        rtc = rt.RichTextCtrl(self.panel, size=(self.width, 19), style=wx.NO_BORDER, pos=(0, self.cur_y))
         rtc.EnableVerticalScrollbar(False)
         rtc.SetCaret(None)
         rtc.SetBackgroundColour((30, 60, 120))
@@ -1012,48 +1019,19 @@ class PilotFrame(wx.Frame):
         rtc.BeginSuppressUndo()
 
         rtc.BeginBold()
-        rtc.BeginFontSize(9.5)
+        rtc.BeginFontSize(10)
         rtc.BeginTextColour((255, 255, 255))
         rtc.BeginAlignment(wx.TEXT_ALIGNMENT_CENTER)
 
         rtc.WriteText(header)
         rtc.Newline()
 
-        rtc.EndBold()
-        rtc.EndFontSize()
-        rtc.EndTextColour()
-        rtc.EndAlignment()
-
         rtc.EndSuppressUndo()
         rtc.Thaw()
-        self.cur_y += 17
+        self.cur_y += 19
 
-    def _write_row(self, txt):
-        rtc = rt.RichTextCtrl(self.panel, size=(self.width, 20), style=wx.NO_BORDER, pos=(0, self.cur_y))
-        rtc.EnableVerticalScrollbar(False)
-        rtc.SetCaret(None)
-        rtc.SetBackgroundColour((25, 25, 25))
-        rtc.SetMargins(5, 2)
-
-        rtc.Freeze()
-        rtc.BeginSuppressUndo()
-
-        rtc.BeginFontSize(8.5)
-        rtc.BeginTextColour((247, 160, 55))
-        rtc.BeginAlignment(wx.TEXT_ALIGNMENT_LEFT)
-
-        rtc.WriteText(txt)
-        rtc.Newline()
-
-        rtc.EndFontSize()
-        rtc.EndTextColour()
-        rtc.EndAlignment()
-
-        rtc.EndSuppressUndo()
-        rtc.Thaw()
-        self.cur_y += 20
-
-    def _write_row_block(self, txt, chunks, x):
+    def _write_row(self, txt, chunks, x, add_y=0):
+        txt = txt.split(':')
         rtc = rt.RichTextCtrl(self.panel, size=(self.width / chunks, 20), style=wx.NO_BORDER, pos=(x, self.cur_y))
         rtc.EnableVerticalScrollbar(False)
         rtc.SetCaret(None)
@@ -1063,16 +1041,19 @@ class PilotFrame(wx.Frame):
         rtc.Freeze()
         rtc.BeginSuppressUndo()
 
-        rtc.BeginFontSize(8.5)
-        rtc.BeginTextColour((247, 160, 55))
+        rtc.BeginFontSize(9)
         rtc.BeginAlignment(wx.TEXT_ALIGNMENT_LEFT)
 
-        rtc.WriteText(txt)
+        if len(txt) == 1:
+            rtc.BeginTextColour((247, 160, 55))
+            rtc.WriteText(txt[0])
+        if len(txt) > 1:
+            rtc.BeginTextColour((62, 157, 250))
+            rtc.WriteText(txt[0] + ":")
+            rtc.BeginTextColour((247, 160, 55))
+            rtc.WriteText(txt[1])
+
         rtc.Newline()
-
-        rtc.EndFontSize()
-        rtc.EndTextColour()
-        rtc.EndAlignment()
-
         rtc.EndSuppressUndo()
         rtc.Thaw()
+        self.cur_y += add_y
