@@ -5,6 +5,10 @@ Full credit to White Russsian, most of this was shamelessly stolen from him: htt
 
 This is the GUI file, it has an App class which just displays the Frame, and the main Frame class which contains all
 the details on how the GUI is made. The GUI contains numerous methods for various user interaction responses.
+
+TODO
+# Add in HIC highlighting / warning
+# Add in all the different loss columns
 """
 import aboutdialog
 import analyze
@@ -44,7 +48,7 @@ class Frame(wx.Frame):
         self.Font = self.Font.Scaled(self.options.Get("FontScale", 1))
 
         # Set stay on-top unless user deactivated it
-        if self.options.Get("StayOnTop", True):
+        if self.options.Get("StayOnTop", False):
             self.ToggleWindowStyle(wx.STAY_ON_TOP)
 
         # Set parameters for columns
@@ -124,14 +128,14 @@ class Frame(wx.Frame):
         # Toggle Stay on-top
         self.stay_ontop = self.view_menu.AppendCheckItem(wx.ID_ANY, 'Stay on-&top\tCTRL+T')
         self.view_menu.Bind(wx.EVT_MENU, self._toggleStayOnTop, self.stay_ontop)
-        self.stay_ontop.Check(self.options.Get("StayOnTop", True))
+        self.stay_ontop.Check(self.options.Get("StayOnTop", False))
 
         # Options Menubar
         self.opt_menu = wx.Menu()
 
         self.pop = self.opt_menu.AppendCheckItem(wx.ID_ANY, "&Populate All Fields\tCTRL+P")
         self.opt_menu.Bind(wx.EVT_MENU, self._setPopulate, self.pop)
-        self.pop.Check(self.options.Get("pop", False))
+        self.pop.Check(self.options.Get("pop", True))
 
         self.km_sub = wx.Menu()
         self.opt_menu.Append(wx.ID_ANY, "Killmail Depth", self.km_sub)
@@ -258,7 +262,7 @@ class Frame(wx.Frame):
         wx.CallLater(20, self._on_timer)
 
     def _mouseMove(self, e):
-        if self.options.Get("show_popup", False):
+        if not self.options.Get("show_popup", False):
             return
         # Static data
         x, y = self.grid.CalcUnscrolledPosition(e.GetPosition())
@@ -304,12 +308,7 @@ class Frame(wx.Frame):
         self.tip.write_popup(self.options.Get("outlist")[row])
 
     def _setPopulate(self, e):
-        if self.options.Get("pop", False):
-            self.pop.Check(False)
-            self.options.Set("pop", False)
-        else:
-            self.pop.Check(True)
-            self.options.Set("pop", True)
+        self.options.Set("pop", self.pop.IsChecked())
 
     def _setKillmailsFast(self, e):
         """

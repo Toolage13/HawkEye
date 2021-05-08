@@ -38,6 +38,7 @@ def watch_clpbd():
                 statusmsg.push_status("Clipboard change detected...")
                 recent_value = clipboard
                 analyze_chars(clipboard.splitlines())
+                config.OPTIONS_OBJECT.Set("show_popup", True)
         time.sleep(0.5)  # Short sleep between loops to reduce CPU load
 
 
