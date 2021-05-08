@@ -60,7 +60,8 @@ def main(pilot_names, populate_all):
             for c in details:
                 for e in character_stats:
                     if c['pilot_id'] == e['pilot_id']:
-                        e['losses'] = c
+                        for k in c:
+                            e[k] = c[k]
                         break
 
         return character_stats, len(filtered_pilot_data) - len(pilot_names)
@@ -144,7 +145,10 @@ async def _get_kill_data(pilot_data, db):
     zkill_data = await _get_zkill_data('kills', pilot_data['pilot_id'], pilot_data['pilot_name'])
 
     if not zkill_data:
-        return _get_stats_dictionary(pilot_data, ret_blank=True)
+        stats = _get_stats_dictionary(pilot_data, ret_blank=True)
+        stats['process_time'] = time.time() - start_time
+        stats['query'] = True
+        return stats
 
     zkill_data = zkill_data[:config.OPTIONS_OBJECT.Get("maxKillmails", default=50)]
     merged_kills = await _merge_zkill_ccp_kills(zkill_data)
@@ -224,6 +228,7 @@ def _get_stats_dictionary(pilot_data, ret_blank=False):
         'pro_10': 0,
         'pro_gang': 0,
         'processed_killmails': 0,
+        'query': True,
         'smartbomb': 0,
         'super': 0,
         'timezone': 'N/A',
@@ -241,6 +246,7 @@ def _get_stats_dictionary(pilot_data, ret_blank=False):
         stats['associates'] = None
         stats['buttbuddies'] = None
         stats['ordered_losses'] = None
+        stats['query'] = False
         stats['top_space'] = None
         stats['warning'] = None
     return stats
@@ -389,7 +395,8 @@ def _prepare_stats(pilot_data, killmails, db):
                 'victim_ship': db.get_ship_name(killmail['victim']['ship_type_id']),
                 'attackers': len(killmail['attackers']),
                 'killed_when': (datetime.date.today() - datetime.datetime.strptime(
-                    killmail['killmail_time'].split('T')[0], '%Y-%m-%d').date()).days
+                    killmail['killmail_time'].split('T')[0], '%Y-%m-%d').date()).days,
+                'killmail_time': datetime.datetime.strptime(killmail['killmail_time'].split('T')[0], '%Y-%m-%d')
             })
 
         # Kill attributes (using certain ships etc.)
@@ -499,6 +506,7 @@ def _format_stats(stats, db):
     stats['capital_use'] = stats['capital_use'] / (stats['processed_killmails'] + 0.01)
     stats['blops_use'] = stats['blops_use'] / (stats['processed_killmails'] + 0.01)
     stats['smartbomb'] = stats['smartbomb'] / (stats['processed_killmails'] + 0.01)
+    stats['boy_scout'] = stats['boy_scout'] / (stats['processed_killmails'] + 0.01)
 
     # Populate warnings
     if stats['titan'] > 0:
@@ -509,8 +517,12 @@ def _format_stats(stats, db):
         stats['warning'] = _add_string(stats['warning'], 'SMARTBOMB')
     if stats['cyno'] > config.CYNO_HL_PERCENTAGE:
         stats['warning'] = _add_string(stats['warning'], 'CYNO')
+    if stats['capital_use'] > config.CAP_HL_PERCENTAGE:
+        stats['warning'] = _add_string(stats['warning'], 'CAP PILOT')
     if stats['blops_use'] > config.BLOPS_HL_PERCENTAGE:
         stats['warning'] = _add_string(stats['warning'], 'BLOPS')
+    if stats['boy_scout'] > config.GATECAMP_HL_PERCENTAGE:
+        stats['warning'] = _add_string(stats['warning'], 'GATECAMPER')
 
     # Associates
     stats['associates'] = _get_associates(stats['associates'], db)
@@ -565,8 +577,6 @@ async def _get_loss_data(pilot_data, db):
     :param db: EveDB object to use
     :return: Dictionary of expanded pilot data
     """
-    start_time = time.time()
-
     zkill_data = await _get_zkill_data('losses', pilot_data['pilot_id'], pilot_data['pilot_name'])
 
     if not zkill_data:
@@ -576,20 +586,21 @@ async def _get_loss_data(pilot_data, db):
     merged_losses = await _merge_zkill_ccp_kills(zkill_data)
 
     stats = _prepare_loss_stats(pilot_data, merged_losses, db)
-    stats['process_time'] = time.time() - start_time
     return stats
 
 
 def _get_loss_stats(pilot_data, ret_blank=False):
     stats = {
         'average_loss_value': 0,
-        'last_used_ship': None,
+        'last_five_losses': [],
+        'last_loss': None,
+        'last_lost_ship': None,
         'pilot_id': pilot_data['pilot_id'],
-        'processed_killmails': 0,
-        'top_ships': {}
+        'processed_lossmails': 0,
+        'top_lost_ships': {}
     }
     if ret_blank:
-        stats['top_ships'] = None
+        stats['top_lost_ships'] = None
     return stats
 
 
@@ -597,18 +608,29 @@ def _prepare_loss_stats(pilot_data, merged_losses, db):
     stats = _get_loss_stats(pilot_data)
 
     for loss in merged_losses:
-        stats['processed_killmails'] += 1
+        stats['processed_lossmails'] += 1
         stats['average_loss_value'] += float(loss['zkb']['totalValue'])
 
-        if stats['last_used_ship'] is None:
-            stats['last_used_ship'] = db.get_ship_name(loss['victim'].get('ship_type_id'))
+        if stats['last_lost_ship'] is None:
+            stats['last_lost_ship'] = db.get_ship_name(loss['victim'].get('ship_type_id'))
             stats['last_loss_attackers'] = len(loss['attackers'])
-        stats['top_ships'] = _add_to_dict(stats['top_ships'], db.get_ship_name(loss['victim'].get('ship_type_id')))
+        stats['top_lost_ships'] = _add_to_dict(stats['top_lost_ships'], db.get_ship_name(loss['victim'].get('ship_type_id')))
+
+        if len(stats['last_five_losses']) < 5:
+            stats['last_five_losses'].append({
+                # 'victim': db.get_pilot_name(loss['victim'].get('character_id')),
+                'victim_ship': db.get_ship_name(loss['victim']['ship_type_id']),
+                'attackers': len(loss['attackers']),
+                'killed_when': (datetime.date.today() - datetime.datetime.strptime(
+                    loss['killmail_time'].split('T')[0], '%Y-%m-%d').date()).days,
+                'killmail_time': datetime.datetime.strptime(loss['killmail_time'].split('T')[0], '%Y-%m-%d')
+            })
 
     return _format_loss_stats(stats)
 
 
 def _format_loss_stats(stats):
-    stats['top_ships'] = ', '.join(s for s in _get_top_three(stats['top_ships']))
-    stats['average_loss_value'] = stats['average_loss_value'] / (stats['processed_killmails'] + 0.01)
+    stats['top_lost_ships'] = ', '.join(s for s in _get_top_three(stats['top_lost_ships']))
+    stats['average_loss_value'] = stats['average_loss_value'] / (stats['processed_lossmails'] + 0.01)
+    stats['last_loss'] = stats['last_five_losses'][0]['killed_when']
     return stats

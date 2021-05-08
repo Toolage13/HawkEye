@@ -30,6 +30,8 @@ GUI_TITLE = "HawkEye " + __version__
 CYNO_HL_PERCENTAGE = 0.01
 BLOPS_HL_PERCENTAGE = 0.01
 SB_HL_PERCENTAGE = 0.1
+GATECAMP_HL_PERCENTAGE = 0.25
+CAP_HL_PERCENTAGE = 0.25
 
 
 def resource_path(relative_path):
@@ -114,7 +116,7 @@ logging and this config. Then get a new logger at the beginning
 of the module like this: "Logger = logging.getLogger(__name__)" and
 produce log messages like this: "Logger.error("text", exc_info=True)"
 """
-LOG_DETAIL = 'INFO'
+LOG_DETAIL = 'ERROR'
 
 LOG_DICT = {
     'version': 1,

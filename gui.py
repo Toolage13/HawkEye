@@ -9,6 +9,7 @@ the details on how the GUI is made. The GUI contains numerous methods for variou
 import aboutdialog
 import analyze
 import config
+import datetime
 import eveDB
 import logging
 import os
@@ -182,7 +183,7 @@ class Frame(wx.Frame):
         self.grid = wx.grid.Grid(self, wx.ID_ANY)
         self.grid.CreateGrid(0, 0)
         self.grid.SetName("Output List")
-        # self.grid.ShowScrollbars(wx.SHOW_SB_NEVER, wx.SHOW_SB_NEVER)
+        self.grid.ShowScrollbars(wx.SHOW_SB_NEVER, wx.SHOW_SB_DEFAULT)
         self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self._mouseMove)
         self.tip = None
         self.prev_row = None
@@ -224,6 +225,35 @@ class Frame(wx.Frame):
         # Set transparency based off restored slider
         self.__do_layout()
 
+        # Start check to kill popups
+        self._on_timer()
+
+    def _on_timer(self):
+        if self.tip is not None:
+            x, y, w, h = self.GetRect()
+            mx, my = wx.GetMousePosition()
+            if mx < x:  # Mouse is left of window
+                try:
+                    self.tip.Destroy()
+                except RuntimeError:
+                    pass
+            elif mx > x + w:  # Mouse is right of window
+                try:
+                    self.tip.Destroy()
+                except RuntimeError:
+                    pass
+            elif my < y:  # Mouse is above window
+                try:
+                    self.tip.Destroy()
+                except RuntimeError:
+                    pass
+            elif my > y + h:  # Mouse is below window
+                try:
+                    self.tip.Destroy()
+                except RuntimeError:
+                    pass
+        wx.CallLater(20, self._on_timer)
+
     def _mouseMove(self, e):
         if self.options.Set("show_popup", False):
             return
@@ -236,6 +266,7 @@ class Frame(wx.Frame):
 
         # if row != self.prev_row and row > -1:
         if row != self.prev_row and row > -1:
+            time.sleep(0.5)
             # Static setup
             screen_pos = self.GetPosition()
             evtx, evty = e.GetPosition()
@@ -243,8 +274,8 @@ class Frame(wx.Frame):
             evty = screen_pos[1] + evty + 85
             self.tip = PilotFrame(self, -1,
                                   self.options.Get("outlist")[row]['pilot_name'],
-                                  size=(360, 400),
-                                  style=wx.TRANSPARENT_WINDOW,
+                                  size=(360, 505),
+                                  style=wx.TRANSPARENT_WINDOW | wx.FRAME_NO_TASKBAR,
                                   pos=(evtx, evty)
                                   )
             self._populate_popup(row)
@@ -256,10 +287,11 @@ class Frame(wx.Frame):
                                   self.options.Get("outlist")[row]['alliance_name'] if
                                   self.options.Get("outlist")[row]['alliance_name'] else
                                   self.options.Get("outlist")[row]['corp_name'])
+        self.tip._write_row("Loading...", 1, 0)
         self.tip.Show()
         self.tip.Update()
         # Get data and add to row if needed
-        if self.options.Get("outlist")[row]['warning'] is None:  # Warning of None means it wasn't run
+        if self.options.Get("outlist")[row]['query'] is False:  # Warning of None means it wasn't run
             outlist = self.options.Get("outlist")
             outlist[row] = analyze.main([outlist[row]['pilot_name']], True)[0][0]
             self.options.Set("outlist", outlist)
@@ -509,7 +541,7 @@ class Frame(wx.Frame):
                 r['alliance_name'],
                 r['associates'],
                 '{:.0%}'.format(r['cyno']),
-                '{}{}'.format(r['last_kill'], 'd'),
+                '{}{}'.format(r['last_kill'], 'd' if r['last_kill'] is not None else ''),
                 r['avg_gang'],
                 r['avg_10'],
                 r['timezone'],
@@ -517,7 +549,7 @@ class Frame(wx.Frame):
                 r['top_ships'],
                 r['top_gang_ships'],
                 r['top_10_ships'],
-                '{} ({:.0%})'.format(r['boy_scout'], r['boy_scout'] / (r['processed_killmails'] + 0.01)),
+                '{:.0%}'.format(r['boy_scout']),
                 r['super'],
                 r['titan'],
                 '{:.0%}'.format(r['capital_use']),
@@ -556,8 +588,8 @@ class Frame(wx.Frame):
                 colidx += 1
             rowidx += 1
 
-        Logger.info("{} characters analysed, in {} seconds ({} filtered).".format(len(outlist), duration, filtered))
-        statusmsg.push_status("{} characters analysed, in {} seconds ({} filtered). Double click character to go to "
+        Logger.info("{} characters analyzed, in {} seconds ({} filtered).".format(len(outlist), duration, filtered))
+        statusmsg.push_status("{} characters analyzed, in {} seconds ({} filtered). Double click character to go to "
                               "zKillboard.".format(len(outlist), duration, filtered))
 
     def updateStatusbar(self, msg):
@@ -933,6 +965,8 @@ class PilotFrame(wx.Frame):
         self.panel = wx.Panel(self, size=(self.width, self.height))
         self.panel.SetBackgroundColour((25, 25, 25))
         self.cur_y = 0
+        self.sizer = wx.BoxSizer(wx.VERTICAL)
+        self.panel.SetSizer(self.sizer)
 
     def _write_top_header_block(self, txt, alignment, x):
         rtc = rt.RichTextCtrl(self.panel, size=(self.width / 2, 30), style=wx.NO_BORDER, pos=(x, 0))
@@ -961,9 +995,9 @@ class PilotFrame(wx.Frame):
 
     def write_popup(self, stats):
         self._write_row("Average Kill: {}{}".format(round(stats['average_kill_value'] / 1000000), "M"), 2, 0)
-        self._write_row("Average Loss: {}{}".format(round(stats['losses']['average_loss_value'] / 1000000), "M"), 1, self.width / 2, 20)
+        self._write_row("Average Loss: {}{}".format(round(stats['average_loss_value'] / 1000000), "M"), 1, self.width / 2, 20)
         self._write_header("Tags")
-        warn = stats['warning'].split(' + ')
+        warn = stats['warning'].split(' + ') if stats['warning'] else None
         if warn is None:
             self._write_row('', 1, 0, 20)
         else:
@@ -976,8 +1010,16 @@ class PilotFrame(wx.Frame):
         self._write_row("Timezone: {}".format(stats['timezone']), 2, self.width / 2, 20)
         self._write_row("Average Fleet: {}".format(stats['avg_10']), 2, 0)
         self._write_row("Average Gang: {}".format(stats['avg_gang']), 2, self.width / 2, 20)
-        self._write_row("Last Activity: {} days".format(stats['last_kill']), 2, 0)
-        self._write_row("Last Ship: {}".format(stats['last_used_ship']), 2, self.width / 2, 20)
+        last_activity = None
+        last_used_ship = None
+        if stats['last_kill'] is not None:
+            last_activity = stats['last_kill']
+            last_used_ship = stats['last_used_ship']
+        if stats['last_loss'] is not None and stats['last_loss'] < last_activity:
+            last_activity = stats['last_loss']
+            last_used_ship = stats['last_lost_ship']
+        self._write_row("Last Activity: {} days ago".format(last_activity if last_activity is not None else None), 2, 0)
+        self._write_row("Last Ship: {}".format(last_used_ship), 2, self.width / 2, 20)
         self._write_row("Top Regions: {}".format(stats['top_regions']), 1, 0, 20)
 
         self._write_header("Associations")
@@ -988,32 +1030,44 @@ class PilotFrame(wx.Frame):
                 self._write_row(a, 1, 0, 20)
 
         self._write_header("Favorite Ships")
-        self._write_row("Top Losses: {}".format(stats['losses']['top_ships']), 1, 0, 20)
+        self._write_row("Top Losses: {}".format(stats['top_lost_ships']), 1, 0, 20)
         self._write_row("Fleet Ships: {}".format(stats['top_10_ships']), 1, 0, 20)
         self._write_row("Gang Ships: {}".format(stats['top_gang_ships']), 1, 0, 20)
 
+        self._write_header("Recent Kills", 2, align=wx.TEXT_ALIGNMENT_LEFT)
+        if len(stats['last_five_kills']) == 0:
+            self._write_row('', 1, 0)
+        else:
+            for kill in stats['last_five_kills']:
+                self._write_row("{} {} ({} pilots)".format(
+                    datetime.datetime.strftime(kill['killmail_time'], "%m/%d"),
+                    kill['victim_ship'],
+                    kill['attackers']),
+                    1, 0, 20
+                )
+        self.cur_y -= 20 * len(stats['last_five_kills']) + 19
+        self._write_header("Recent Losses", 2, self.width / 2, align=wx.TEXT_ALIGNMENT_LEFT)
+        if len(stats['last_five_losses']) == 0:
+            self._write_row('', 1, 0, 20)
+        else:
+            for kill in stats['last_five_losses']:
+                self._write_row("{} {} ({} pilots)".format(
+                    datetime.datetime.strftime(kill['killmail_time'], "%m/%d"),
+                    kill['victim_ship'],
+                    kill['attackers']),
+                    1, self.width / 2, 20
+                )
+
         self._write_header("Fetch Time")
         self._write_row("Retrieved in {} seconds.".format(
-            round(stats['process_time'] + stats['losses']['process_time'], 2)), 1, 0, 20)
+            round(stats['process_time'], 2)), 1, 0, 20)
 
-        """
-                ', '.join(stats['warning'].replace(' ', '').split(' + ')[:2]),
-                stats['corp_name'],
-                stats['alliance_name'],
-                stats['top_space'],
-                stats['timezone'],
-                stats['associates'],
-                stats['top_ships'],
-                round(stats['average_kill_value'] / 1000000), "M",
-                stats['last_five_kills']
-        """
-
-    def _write_header(self, header):
-        rtc = rt.RichTextCtrl(self.panel, size=(self.width, 19), style=wx.NO_BORDER, pos=(0, self.cur_y))
+    def _write_header(self, header, chunks=1, x=0, add_y=19, align=wx.TEXT_ALIGNMENT_CENTER):
+        rtc = rt.RichTextCtrl(self.panel, size=(self.width / chunks, 19), style=wx.NO_BORDER, pos=(x, self.cur_y))
         rtc.EnableVerticalScrollbar(False)
         rtc.SetCaret(None)
         rtc.SetBackgroundColour((30, 60, 120))
-        rtc.SetMargins(1, 1)
+        rtc.SetMargins(5, 1)
 
         rtc.Freeze()
         rtc.BeginSuppressUndo()
@@ -1021,14 +1075,14 @@ class PilotFrame(wx.Frame):
         rtc.BeginBold()
         rtc.BeginFontSize(10)
         rtc.BeginTextColour((255, 255, 255))
-        rtc.BeginAlignment(wx.TEXT_ALIGNMENT_CENTER)
+        rtc.BeginAlignment(align)
 
         rtc.WriteText(header)
         rtc.Newline()
 
         rtc.EndSuppressUndo()
         rtc.Thaw()
-        self.cur_y += 19
+        self.cur_y += add_y
 
     def _write_row(self, txt, chunks, x, add_y=0):
         txt = txt.split(':')
