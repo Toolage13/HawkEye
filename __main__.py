@@ -64,13 +64,12 @@ def analyze_chars(pilot_names):
     start_time = time.time()
     wx.CallAfter(app.MyFrame.grid.ClearGrid)
     try:
-        outlist, filtered = analyze.main(pilot_names, config.OPTIONS_OBJECT.Get("pop", False))
+        outlist, filtered = analyze.main(pilot_names, config.OPTIONS_OBJECT.Get("pop", True))
         duration = round(time.time() - start_time, 1)
         if outlist is not None:
             # Need to use keyword args as sortOutlist can also get called
             # by event handler which would pass event object as first argument.
             wx.CallAfter(app.MyFrame.sortOutlist, outlist=outlist, duration=duration, filtered=filtered)
-            config.OPTIONS_OBJECT.Set("show_popup", False)
         else:
             statusmsg.push_status("No valid character names found. Please try again...")
     except Exception:

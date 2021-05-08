@@ -5,6 +5,7 @@ This is the big boy that handles all the fetching of data, and analysis of the f
 """
 import asyncio
 from aiohttp import ClientSession
+import datetime
 import eveDB
 import config
 import json
@@ -36,7 +37,8 @@ def main(pilot_names, populate_all):
             return character_stats, len(filtered_pilot_data) - len(pilot_names)
 
         if len(filtered_pilot_data) == 0:
-            Logger.info('Filtered out all pilots provided...')
+            Logger.warning('Filtered out all pilots provided...')
+            statusmsg.push_status("Filtered out all pilots provided...")
             return None
 
         character_stats = []
@@ -45,12 +47,22 @@ def main(pilot_names, populate_all):
             Logger.info('Running {} pilots through concurrent_run_character(...)'.format(len(chunk)))
             start_time = time.time()
             loop = asyncio.new_event_loop()
-            details = loop.run_until_complete(_concurrent_run_character(chunk, db))
+            details = loop.run_until_complete(_concurrent_run_character(chunk, db, 'kills'))
             loop.close()
             for c in details:
                 character_stats.append(c)
             statusmsg.push_status('Ran {} pilots in {} seconds.'.format(len(chunk), round(time.time() - start_time, 2)))
             Logger.info('Ran {} pilots in {} seconds.'.format(len(chunk), round(time.time() - start_time, 2)))
+
+            loop = asyncio.new_event_loop()
+            details = loop.run_until_complete(_concurrent_run_character(chunk, db, 'losses'))
+            loop.close()
+            for c in details:
+                for e in character_stats:
+                    if c['pilot_id'] == e['pilot_id']:
+                        e['losses'] = c
+                        break
+
         return character_stats, len(filtered_pilot_data) - len(pilot_names)
 
 
@@ -95,54 +107,6 @@ async def _get_pilot_ids(pilot_names, db):
     return await asyncio.gather(*coros)
 
 
-def _get_stats_dictionary(pilot_data, ret_blank=False):
-    stats = {
-        'alliance_id': pilot_data['alliance_id'],
-        'alliance_name': pilot_data['alliance_name'],
-        'associates': {},
-        'autz': {'kills': 0.01, 'attackers': 0},
-        'average_kill_value': 0,
-        'average_pilots': 0,
-        'avg_10': 0,
-        'avg_gang': 0,
-        'blops_use': 0,
-        'boy_scout': 0,
-        'buttbuddies': {},
-        'capital_use': 0,
-        'corp_id': pilot_data['corp_id'],
-        'corp_name': pilot_data['corp_name'],
-        'cyno': 0,
-        'eutz': {'kills': 0.01, 'attackers': 0},
-        'highsec': 0,
-        'lowsec': 0,
-        'nullsec': 0,
-        'pilot_id': pilot_data['pilot_id'],
-        'pilot_name': pilot_data['pilot_name'],
-        'playstyle': 'None',
-        'pro_10': 0,
-        'pro_gang': 0,
-        'processed_killmails': 0,
-        'smartbomb': 0,
-        'super': 0,
-        'timezone': 'N/A',
-        'titan': 0,
-        'top_10_ships': None,
-        'top_gang_ships': None,
-        'top_regions': None,
-        'top_ships': None,
-        'top_space': {},
-        'ustz': {'kills': 0.01, 'attackers': 0},
-        'warning': '',
-        'wormhole': 0
-    }
-    if ret_blank:
-        stats['associates'] = None
-        stats['buttbuddies'] = None
-        stats['top_space'] = None
-        stats['warning'] = None
-    return stats
-
-
 def divide_chunks(my_list, n):
     """
     Divide a list l into chunks of n size, yield each list as iterated
@@ -154,14 +118,17 @@ def divide_chunks(my_list, n):
         yield my_list[i:i + n]
 
 
-async def _concurrent_run_character(pilot_chunk, db):
+async def _concurrent_run_character(pilot_chunk, db, kills_loss):
     """
     Run pilot_data p through _get_kill_data() asynchronously and assemble all expanded pilot data via asyncio.gather()
     :param pilot_chunk: List of pilot data stored as dictionaries
     :param db: EveDB to use
     :return: List of dictionaries containing expanded pilot data
     """
-    coros = [_get_kill_data(p, db) for p in pilot_chunk]
+    if kills_loss == 'kills':
+        coros = [_get_kill_data(p, db) for p in pilot_chunk]
+    if kills_loss == 'losses':
+        coros = [_get_loss_data(p, db) for p in pilot_chunk]
     return await asyncio.gather(*coros)
 
 
@@ -174,21 +141,16 @@ async def _get_kill_data(pilot_data, db):
     :return: Dictionary of expanded pilot data
     """
     Logger.info('Getting kill data for {}.'.format(pilot_data['pilot_name']))
-    stats = _get_stats_dictionary(pilot_data)
 
     zkill_data = await _get_zkill_data('kills', pilot_data['pilot_id'], pilot_data['pilot_name'])
 
     if not zkill_data:
-        stats['associates'] = None
-        stats['top_space'] = None
-
-        return stats
+        return _get_stats_dictionary(pilot_data, ret_blank=True)
 
     zkill_data = zkill_data[:config.OPTIONS_OBJECT.Get("maxKillmails", default=50)]
     merged_kills = await _merge_zkill_ccp_kills(zkill_data)
 
-    return _prepare_stats(
-        stats, merged_kills, db, pilot_data['pilot_id'], pilot_data['corp_id'], pilot_data['alliance_id'])
+    return _prepare_stats(pilot_data, merged_kills, db)
 
 
 async def _get_zkill_data(page, pilot_id, pilot_name):
@@ -227,6 +189,57 @@ async def _get_zkill_data(page, pilot_id, pilot_name):
     statusmsg.push_status('Requested {} and got it in {} seconds'.format(url, round(time.time() - start_time, 2)))
     Logger.info('Requested {} and got it in {} seconds'.format(url, round(time.time() - start_time, 2)))
     return data
+
+
+def _get_stats_dictionary(pilot_data, ret_blank=False):
+    stats = {
+        'alliance_id': pilot_data['alliance_id'],
+        'alliance_name': pilot_data['alliance_name'],
+        'associates': {},
+        'autz': {'kills': 0.01, 'attackers': 0},
+        'average_kill_value': 0,
+        'average_pilots': 0,
+        'avg_10': 0,
+        'avg_gang': 0,
+        'blops_use': 0,
+        'boy_scout': 0,
+        'buttbuddies': {},
+        'capital_use': 0,
+        'corp_id': pilot_data['corp_id'],
+        'corp_name': pilot_data['corp_name'],
+        'cyno': 0,
+        'eutz': {'kills': 0.01, 'attackers': 0},
+        'highsec': 0,
+        'lowsec': 0,
+        'nullsec': 0,
+        'last_five_kills': [],
+        'last_kill': None,
+        'pilot_id': pilot_data['pilot_id'],
+        'pilot_name': pilot_data['pilot_name'],
+        'playstyle': 'None',
+        'pro_10': 0,
+        'pro_gang': 0,
+        'processed_killmails': 0,
+        'smartbomb': 0,
+        'super': 0,
+        'timezone': 'N/A',
+        'titan': 0,
+        'top_10_ships': None,
+        'top_gang_ships': None,
+        'top_regions': None,
+        'top_ships': None,
+        'top_space': {},
+        'ustz': {'kills': 0.01, 'attackers': 0},
+        'warning': '',
+        'wormhole': 0
+    }
+    if ret_blank:
+        stats['associates'] = None
+        stats['buttbuddies'] = None
+        stats['ordered_losses'] = None
+        stats['top_space'] = None
+        stats['warning'] = None
+    return stats
 
 
 async def _merge_zkill_ccp_kills(data):
@@ -323,7 +336,7 @@ async def _fetch(killmail_id, killhash, session):
             return j
 
 
-def _prepare_stats(stats, killmails, db, pilot_id, corp_id, alliance_id):
+def _prepare_stats(pilot_data, killmails, db):
     """
     Process a list of killmails stored as dictionaries, assign a lot of attributes to stats, then pass to
     _format_stats() for final calculations.
@@ -333,6 +346,7 @@ def _prepare_stats(stats, killmails, db, pilot_id, corp_id, alliance_id):
     :param pilot_id: Pilot ID
     :return: Enriched stats
     """
+    stats = _get_stats_dictionary(pilot_data)
     for killmail in killmails:
         stats['processed_killmails'] += 1
         # Valuations, fleet sizes, and ship types in small or large fleets
@@ -346,7 +360,7 @@ def _prepare_stats(stats, killmails, db, pilot_id, corp_id, alliance_id):
             stats['pro_gang'] += 1
         for attacker in killmail['attackers']:
             attacker_id = attacker.get('character_id')
-            if attacker_id == pilot_id:
+            if attacker_id == pilot_data['pilot_id']:
                 stats['top_ships'] = _add_to_dict(stats['top_ships'], attacker.get('ship_type_id'))
                 if len(killmail['attackers']) > 9:
                     stats['top_10_ships'] = _add_to_dict(stats['top_10_ships'], attacker.get('ship_type_id'))
@@ -361,27 +375,40 @@ def _prepare_stats(stats, killmails, db, pilot_id, corp_id, alliance_id):
         stats[_get_timezone(killmail['killmail_time'])]['kills'] += 1
         stats[_get_timezone(killmail['killmail_time'])]['attackers'] += len(killmail['attackers'])
 
+        # Add to our list of recent kills
+        if len(stats['last_five_kills']) < 5:
+            stats['last_five_kills'].append({
+                'victim': db.get_pilot_name(killmail['victim'].get('character_id')),
+                'victim_ship' : db.get_ship_name(killmail['victim']['ship_type_id']),
+                'attackers': len(killmail['attackers']),
+                'killed_when': (datetime.date.today() - datetime.datetime.strptime(
+                    killmail['killmail_time'].split('T')[0], '%Y-%m-%d').date()).days
+            })
+
+
+
         # Kill attributes (using certain ships etc.)
-        if db.killed_on_gate(killmail) and not(db.used_capital(killmail['attackers'], pilot_id)) and not(
-                db.used_blops(killmail['attackers'], pilot_id)):
+        if db.killed_on_gate(killmail) and not(db.used_capital(killmail['attackers'], pilot_data['pilot_id'])) and not(
+                db.used_blops(killmail['attackers'], pilot_data['pilot_id'])):
             stats['boy_scout'] += 1  # Gatecamping
-        if db.used_cyno(killmail['attackers'], pilot_id):
+        if db.used_cyno(killmail['attackers'], pilot_data['pilot_id']):
             stats['cyno'] += 1
-        if db.used_capital(killmail['attackers'], pilot_id):
+        if db.used_capital(killmail['attackers'], pilot_data['pilot_id']):
             stats['capital_use'] += 1
-        if db.used_blops(killmail['attackers'], pilot_id):
+        if db.used_blops(killmail['attackers'], pilot_data['pilot_id']):
             stats['blops_use'] += 1
-        if db.used_smartbomb(killmail['attackers'], pilot_id):
+        if db.used_smartbomb(killmail['attackers'], pilot_data['pilot_id']):
             stats['smartbomb'] += 1
-        if db.used_super(killmail['attackers'], pilot_id):
+        if db.used_super(killmail['attackers'], pilot_data['pilot_id']):
             stats['super'] += 1
-        if db.used_titan(killmail['attackers'], pilot_id):
+        if db.used_titan(killmail['attackers'], pilot_data['pilot_id']):
             stats['titan'] += 1
 
         # Associates
         for attacker in killmail['attackers']:
-            if attacker.get('character_id') is not None and attacker.get('character_id') != pilot_id and attacker.get(
-                    'corp_id') != corp_id and attacker.get('alliance_id') != alliance_id:
+            if attacker.get('character_id') is not None and attacker.get(
+                    'character_id') != pilot_data['pilot_id'] and attacker.get(
+                        'corp_id') != pilot_data['corp_id'] and attacker.get('alliance_id') != pilot_data['alliance_id']:
                 _add_to_dict(stats['associates'], attacker.get('alliance_id') if attacker.get(
                     'alliance_id') else attacker['corporation_id'])
 
@@ -459,6 +486,9 @@ def _format_stats(stats, db):
     stats['top_space'] = '{}{} ({}%)'.format(activity[0].upper(), activity[1:], round(
         stats['top_space'][activity] / (stats['processed_killmails'] + 0.01) * 100))
 
+    # Recent kill details
+    stats['last_kill'] = stats['last_five_kills'][0]['killed_when']
+
     # Kill attributes (using certain ships etc.)
     stats['cyno'] = stats['cyno'] / (stats['processed_killmails'] + 0.01)
     stats['capital_use'] = stats['capital_use'] / (stats['processed_killmails'] + 0.01)
@@ -522,22 +552,39 @@ def _get_associates(associates, db):
     return associates
 
 
-def get_loss_data(pilot_id, pilot_name):
-    loop = asyncio.new_event_loop()
-    lossmails = loop.run_until_complete(get_merged_loss_killmails(pilot_id, pilot_name))
-    loop.close()
+async def _get_loss_data(pilot_data, db):
+    """
+    Return zkill data for pilot using _get_zkill_data(). Merge with kill data from CCP fetched with
+    _merge_zkill_ccp_kills(). Finally, pass to _prepare_stats() for final processing and then return
+    :param pilot_data: Dictionary of pilot data
+    :param db: EveDB object to use
+    :return: Dictionary of expanded pilot data
+    """
+    Logger.info('Getting loss data for {}.'.format(pilot_data['pilot_name']))
 
-    avg_loss = 0
-    for loss in lossmails:
-        avg_loss += loss['zkb']['totalValue']
-    return avg_loss / len(lossmails)
+    zkill_data = await _get_zkill_data('losses', pilot_data['pilot_id'], pilot_data['pilot_name'])
 
-
-async def get_merged_loss_killmails(pilot_id, pilot_name):
-    zkill_data = await _get_zkill_data('losses', pilot_id, pilot_name)
     if not zkill_data:
-        return None
+        return _get_loss_stats(pilot_data, ret_blank=True)
 
     zkill_data = zkill_data[:config.OPTIONS_OBJECT.Get("maxKillmails", default=50)]
+    merged_losses = await _merge_zkill_ccp_kills(zkill_data)
 
-    return await _merge_zkill_ccp_kills(zkill_data)
+    return _prepare_loss_stats(pilot_data, merged_losses, db)
+
+
+def _get_loss_stats(pilot_data, ret_blank=False):
+    stats = {
+        'average_loss': 0,
+        'pilot_id': pilot_data['pilot_id']
+    }
+    return stats
+
+
+def _prepare_loss_stats(pilot_data, merged_losses, db):
+    stats = _get_loss_stats(pilot_data)
+
+    for loss in merged_losses:
+        stats['average_loss'] += float(loss['zkb']['totalValue'])
+
+    return stats

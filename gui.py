@@ -20,6 +20,7 @@ import webbrowser
 import wx
 import wx.grid as WXG
 import wx.lib.agw.persist as pm
+import wx.richtext as rt
 import hawkeyestt as STT
 import win32api
 
@@ -57,20 +58,21 @@ class Frame(wx.Frame):
             [4, "Alliance", wx.ALIGN_LEFT, 80, True, True, "Alliance", 'alliance_name'],
             [5, "Associates", wx.ALIGN_LEFT, 80, True, True, "Associates", 'associates'],
             [6, "Cyno", wx.ALIGN_LEFT, 80, True, True, "Cyno Use", 'cyno'],
-            [7, "Avg. Gang", wx.ALIGN_LEFT, 80, True, True, "Average Gang", 'avg_gang'],
-            [8, "Avg. Fleet", wx.ALIGN_LEFT, 80, True, True, "Average Fleet Size", 'avg_10'],
-            [9, "Timezone", wx.ALIGN_LEFT, 80, True, True, "Timezone", "timezone"],
-            [10, "Activity", wx.ALIGN_LEFT, 80, True, True, "Activity", "top_space"],
-            [11, "Top Ships", wx.ALIGN_LEFT, 80, True, True, "Top Ships", 'top_ships'],
-            [12, "Top Gang Ships", wx.ALIGN_LEFT, 80, True, True, "Top Gang Ships", 'top_gang_ships'],
-            [13, "Top Fleet Ships", wx.ALIGN_LEFT, 80, True, True, "Top Fleet Ships", 'top_10_ships'],
-            [14, "Gate Kills", wx.ALIGN_LEFT, 80, True, True, "Gatecamping", 'boy_scout'],
-            [15, "Super", wx.ALIGN_LEFT, 40, True, True, "Super Kills", 'super'],
-            [16, "Titan", wx.ALIGN_LEFT, 40, True, True, "Titan Kills", 'titan'],
-            [17, "Capital", wx.ALIGN_LEFT, 80, True, True, "Capital Use", 'capital_use'],
-            [18, "Blops", wx.ALIGN_LEFT, 80, True, True, "Blops Use", 'blops_use'],
-            [19, "Top Regions", wx.ALIGN_LEFT, 80, True, True, "Top Regions", 'top_regions'],
-            [20, "", None, 1, False, True, "", 1]  # Need for _stretchLastCol()
+            [7, "Last Kill", wx.ALIGN_LEFT, 80, True, True, "Last Kill", 'last_kill'],
+            [8, "Avg. Gang", wx.ALIGN_LEFT, 80, True, True, "Average Gang", 'avg_gang'],
+            [9, "Avg. Fleet", wx.ALIGN_LEFT, 80, True, True, "Average Fleet Size", 'avg_10'],
+            [10, "Timezone", wx.ALIGN_LEFT, 80, True, True, "Timezone", "timezone"],
+            [11, "Activity", wx.ALIGN_LEFT, 80, True, True, "Activity", "top_space"],
+            [12, "Top Ships", wx.ALIGN_LEFT, 80, True, True, "Top Ships", 'top_ships'],
+            [13, "Top Gang Ships", wx.ALIGN_LEFT, 80, True, True, "Top Gang Ships", 'top_gang_ships'],
+            [14, "Top Fleet Ships", wx.ALIGN_LEFT, 80, True, True, "Top Fleet Ships", 'top_10_ships'],
+            [15, "Gate Kills", wx.ALIGN_LEFT, 80, True, True, "Gatecamping", 'boy_scout'],
+            [16, "Super", wx.ALIGN_LEFT, 40, True, True, "Super Kills", 'super'],
+            [17, "Titan", wx.ALIGN_LEFT, 40, True, True, "Titan Kills", 'titan'],
+            [18, "Capital", wx.ALIGN_LEFT, 80, True, True, "Capital Use", 'capital_use'],
+            [19, "Blops", wx.ALIGN_LEFT, 80, True, True, "Blops Use", 'blops_use'],
+            [20, "Top Regions", wx.ALIGN_LEFT, 80, True, True, "Top Regions", 'top_regions'],
+            [21, "", None, 1, False, True, "", 1]  # Need for _stretchLastCol()
             )
 
         # Define the menu bar and menu items
@@ -242,8 +244,10 @@ class Frame(wx.Frame):
             evtx, evty = e.GetPosition()
             evtx = screen_pos[0] + evtx + 20
             evty = screen_pos[1] + evty + 85
-            font = wx.Font(wx.FontInfo(10).Bold())
-            font.SetPointSize(13)
+            headfont = wx.Font(wx.FontInfo(10).Bold())
+            headfont.SetPointSize(13)
+            msgfont = wx.Font(wx.FontInfo(10))
+            msgfont.SetPointSize(11)
             # Set up
             self.tip = STT.SuperToolTip("Loading...")
             self.tip.EnableTip(True)
@@ -251,7 +255,8 @@ class Frame(wx.Frame):
             self.tip.SetDrawHeaderLine(True)
             self.tip.SetTarget(self.grid.GetGridWindow())
             self.tip.SetHeader(self.options.Get("outlist")[row]['pilot_name'])
-            self.tip.SetHeaderFont(font)
+            self.tip.SetHeaderFont(headfont)
+            self.tip.SetMessageFont(msgfont)
             self.tip.Show(True)
             # Need to come after tip.Show()
             self.tip.GetTipWindow().MakeWindowTransparent(217)
@@ -269,25 +274,43 @@ class Frame(wx.Frame):
         self.prev_row = row
 
     def _populate_popup(self, row, x, y):
-        # Get killmail data and add to row if needed
+        # Get data and add to row if needed
         if self.options.Get("outlist")[row]['warning'] is None:  # Warning of None means it wasn't run
             outlist = self.options.Get("outlist")
             outlist[row] = analyze.main([outlist[row]['pilot_name']], True)[0][0]
             self.options.Set("outlist", outlist)
             self.updateList(self.options.Get("outlist"))
 
-        # Get lossmail data and add to row if needed
-        if not self.options.Get("outlist")[row].get('losses'):
-            outlist = self.options.Get("outlist")
-            outlist[row]['losses'] = analyze.get_loss_data(self.options.Get("outlist")[row]['pilot_id'],
-                                                           self.options.Get("outlist")[row]['pilot_name'])
-            self.options.Set("outlist", outlist)
         # Populate data
-        self.tip.SetMessage(str(self.options.Get("outlist")[row].get('losses')))
+        self.tip.SetMessage(self._format_popup_message(row))
         self.tip.GetTipWindow().setRectWidthHeight(200, 200)
         self.tip.GetTipWindow().setRectPosition(x, y)
         self.tip.Show(True)
         self.tip.Update()
+
+    def _format_popup_message(self, row):
+        stats = self.options.Get("outlist")[row]
+        return """
+        Warning: {}
+        Corporation: {}
+        Alliance: {}
+        Associates: {}
+        Activity: {}
+        Timezone: {}
+        Top Ships: {}
+        Average Kill Value: {}{}
+        Last Kills: {}
+        """.format(
+            ', '.join(stats['warning'].replace(' ','').split(' + ')[:2]),
+            stats['corp_name'],
+            stats['alliance_name'],
+            stats['top_space'],
+            stats['timezone'],
+            stats['associates'],
+            stats['top_ships'],
+            round(stats['average_kill_value'] / 1000000), "M",
+            stats['last_five_kills']
+        )
 
     def _setPopulate(self, e):
         if self.options.Get("pop", False):
@@ -531,8 +554,9 @@ class Frame(wx.Frame):
                 r['alliance_name'],
                 r['associates'],
                 '{:.0%}'.format(r['cyno']),
-                '{} ({:.0%})'.format(r['avg_gang'], r['pro_gang'] / (r['processed_killmails'] + 0.01)),
-                '{} ({:.0%})'.format(r['avg_10'], r['pro_10'] / (r['processed_killmails'] + 0.01)),
+                '{}{}'.format(r['last_kill'], 'd'),
+                r['avg_gang'],
+                r['avg_10'],
                 r['timezone'],
                 r['top_space'],
                 r['top_ships'],
@@ -944,3 +968,35 @@ class App(wx.App):
         self.SetTopWindow(self.MyFrame)
         self.MyFrame.Show()
         return True
+
+
+class PilotFrame(wx.Frame):
+    def __init__(self, *args, **kw):
+        wx.Frame.__init__(self, *args, **kw)
+
+        self.SetStatusText("Welcome to wx.richtext.RichTextCtrl!")
+
+        self.rtc = rt.RichTextCtrl(self, style=wx.VSCROLL | wx.HSCROLL | wx.NO_BORDER);
+        wx.CallAfter(self.rtc.SetFocus)
+
+        self.rtc.Freeze()
+        self.rtc.BeginSuppressUndo()
+
+        self.rtc.BeginParagraphSpacing(0, 20)
+        self.rtc.BeginAlignment(rt.TEXT_ALIGNMENT_LEFT)
+        self.rtc.BeginBold()
+        self.rtc.BeginLineSpacing(rt.TEXT_ATTR_LINE_SPACING_HALF)
+        self.rtc.BeginFontSize(14)
+
+        self.rtc.WriteText("Welcome to wxRichTextCtrl, a wxWidgets control for editing and presenting styled text and images")
+        self.rtc.EndFontSize()
+        self.rtc.Newline()
+
+        self.rtc.EndParagraphSpacing()
+        self.rtc.EndAlignment()
+        self.rtc.EndBold()
+        self.rtc.EndLineSpacing()
+        self.rtc.EndFontSize()
+
+        self.rtc.EndSuppressUndo()
+        self.rtc.Thaw()
