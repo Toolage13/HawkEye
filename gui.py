@@ -7,17 +7,21 @@ This is the GUI file, it has an App class which just displays the Frame, and the
 the details on how the GUI is made. The GUI contains numerous methods for various user interaction responses.
 """
 import aboutdialog
+import analyze
 import config
+import datetime
 import eveDB
 import logging
 import os
 import shutil
 import sortarray
 import statusmsg
+import time
 import webbrowser
 import wx
 import wx.grid as WXG
 import wx.lib.agw.persist as pm
+import wx.richtext as rt
 
 Logger = logging.getLogger(__name__)
 
@@ -53,20 +57,21 @@ class Frame(wx.Frame):
             [4, "Alliance", wx.ALIGN_LEFT, 80, True, True, "Alliance", 'alliance_name'],
             [5, "Associates", wx.ALIGN_LEFT, 80, True, True, "Associates", 'associates'],
             [6, "Cyno", wx.ALIGN_LEFT, 80, True, True, "Cyno Use", 'cyno'],
-            [7, "Avg. Gang", wx.ALIGN_LEFT, 80, True, True, "Average Gang", 'avg_gang'],
-            [8, "Avg. Fleet", wx.ALIGN_LEFT, 80, True, True, "Average Fleet Size", 'avg_10'],
-            [9, "Timezone", wx.ALIGN_LEFT, 80, True, True, "Timezone", "timezone"],
-            [10, "Activity", wx.ALIGN_LEFT, 80, True, True, "Activity", "top_space"],
-            [11, "Top Ships", wx.ALIGN_LEFT, 80, True, True, "Top Ships", 'top_ships'],
-            [12, "Top Gang Ships", wx.ALIGN_LEFT, 80, True, True, "Top Gang Ships", 'top_gang_ships'],
-            [13, "Top Fleet Ships", wx.ALIGN_LEFT, 80, True, True, "Top Fleet Ships", 'top_10_ships'],
-            [14, "Gate Kills", wx.ALIGN_LEFT, 80, True, True, "Gatecamping", 'boy_scout'],
-            [15, "Super", wx.ALIGN_LEFT, 40, True, True, "Super Kills", 'super'],
-            [16, "Titan", wx.ALIGN_LEFT, 40, True, True, "Titan Kills", 'titan'],
-            [17, "Capital", wx.ALIGN_LEFT, 80, True, True, "Capital Use", 'capital_use'],
-            [18, "Blops", wx.ALIGN_LEFT, 80, True, True, "Blops Use", 'blops_use'],
-            [19, "Top Regions", wx.ALIGN_LEFT, 80, True, True, "Top Regions", 'top_regions'],
-            [20, "", None, 1, False, True, "", 1]  # Need for _stretchLastCol()
+            [7, "Last Kill", wx.ALIGN_LEFT, 80, True, True, "Last Kill", 'last_kill'],
+            [8, "Avg. Gang", wx.ALIGN_LEFT, 80, True, True, "Average Gang", 'avg_gang'],
+            [9, "Avg. Fleet", wx.ALIGN_LEFT, 80, True, True, "Average Fleet Size", 'avg_10'],
+            [10, "Timezone", wx.ALIGN_LEFT, 80, True, True, "Timezone", "timezone"],
+            [11, "Activity", wx.ALIGN_LEFT, 80, True, True, "Activity", "top_space"],
+            [12, "Top Ships", wx.ALIGN_LEFT, 80, True, True, "Top Ships", 'top_ships'],
+            [13, "Top Gang Ships", wx.ALIGN_LEFT, 80, True, True, "Top Gang Ships", 'top_gang_ships'],
+            [14, "Top Fleet Ships", wx.ALIGN_LEFT, 80, True, True, "Top Fleet Ships", 'top_10_ships'],
+            [15, "Gate Kills", wx.ALIGN_LEFT, 80, True, True, "Gatecamping", 'boy_scout'],
+            [16, "Super", wx.ALIGN_LEFT, 40, True, True, "Super Kills", 'super'],
+            [17, "Titan", wx.ALIGN_LEFT, 40, True, True, "Titan Kills", 'titan'],
+            [18, "Capital", wx.ALIGN_LEFT, 80, True, True, "Capital Use", 'capital_use'],
+            [19, "Blops", wx.ALIGN_LEFT, 80, True, True, "Blops Use", 'blops_use'],
+            [20, "Top Regions", wx.ALIGN_LEFT, 80, True, True, "Top Regions", 'top_regions'],
+            [21, "", None, 1, False, True, "", 1]  # Need for _stretchLastCol()
             )
 
         # Define the menu bar and menu items
@@ -124,6 +129,10 @@ class Frame(wx.Frame):
         # Options Menubar
         self.opt_menu = wx.Menu()
 
+        self.pop = self.opt_menu.AppendCheckItem(wx.ID_ANY, "&Populate All Fields\tCTRL+P")
+        self.opt_menu.Bind(wx.EVT_MENU, self._setPopulate, self.pop)
+        self.pop.Check(self.options.Get("pop", False))
+
         self.km_sub = wx.Menu()
         self.opt_menu.Append(wx.ID_ANY, "Killmail Depth", self.km_sub)
 
@@ -172,7 +181,10 @@ class Frame(wx.Frame):
         self.grid = wx.grid.Grid(self, wx.ID_ANY)
         self.grid.CreateGrid(0, 0)
         self.grid.SetName("Output List")
-        # self.grid.ShowScrollbars(wx.SHOW_SB_NEVER, wx.SHOW_SB_NEVER)
+        self.grid.ShowScrollbars(wx.SHOW_SB_NEVER, wx.SHOW_SB_DEFAULT)
+        self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self._mouseMove)
+        self.tip = None
+        self.prev_row = None
 
         # The status label shows various info and error messages.
         self.status_label = wx.StaticText(self,
@@ -210,6 +222,88 @@ class Frame(wx.Frame):
 
         # Set transparency based off restored slider
         self.__do_layout()
+
+        # Start check to kill popups
+        self._on_timer()
+
+    def _on_timer(self):
+        if self.tip is not None:
+            x, y, w, h = self.GetRect()
+            mx, my = wx.GetMousePosition()
+            if mx < x:  # Mouse is left of window
+                try:
+                    self.tip.Destroy()
+                except RuntimeError:
+                    pass
+            elif mx > x + w:  # Mouse is right of window
+                try:
+                    self.tip.Destroy()
+                except RuntimeError:
+                    pass
+            elif my < y:  # Mouse is above window
+                try:
+                    self.tip.Destroy()
+                except RuntimeError:
+                    pass
+            elif my > y + h:  # Mouse is below window
+                try:
+                    self.tip.Destroy()
+                except RuntimeError:
+                    pass
+        wx.CallLater(20, self._on_timer)
+
+    def _mouseMove(self, e):
+        if self.options.Set("show_popup", False):
+            return
+        # Static data
+        x, y = self.grid.CalcUnscrolledPosition(e.GetPosition())
+        row = self.grid.YToRow(y)
+
+        if self.tip and (row == -1 or row != self.prev_row):
+            self.tip.Destroy()
+
+        # if row != self.prev_row and row > -1:
+        if row != self.prev_row and row > -1:
+            time.sleep(0.5)
+            # Static setup
+            screen_pos = self.GetPosition()
+            evtx, evty = e.GetPosition()
+            evtx = screen_pos[0] + evtx + 20
+            evty = screen_pos[1] + evty + 85
+            self.tip = PilotFrame(self, -1,
+                                  self.options.Get("outlist")[row]['pilot_name'],
+                                  size=(360, 505),
+                                  style=wx.TRANSPARENT_WINDOW | wx.FRAME_NO_TASKBAR,
+                                  pos=(evtx, evty)
+                                  )
+            self._populate_popup(row)
+
+        self.prev_row = row
+
+    def _populate_popup(self, row):
+        self.tip.write_top_header(self.options.Get("outlist")[row]['pilot_name'],
+                                  self.options.Get("outlist")[row]['alliance_name'] if
+                                  self.options.Get("outlist")[row]['alliance_name'] else
+                                  self.options.Get("outlist")[row]['corp_name'])
+        self.tip._write_row("Loading...", 1, 0)
+        self.tip.Show()
+        self.tip.Update()
+        # Get data and add to row if needed
+        if self.options.Get("outlist")[row]['query'] is False:  # Warning of None means it wasn't run
+            outlist = self.options.Get("outlist")
+            outlist[row] = analyze.main([outlist[row]['pilot_name']], True)[0][0]
+            self.options.Set("outlist", outlist)
+            self.updateList(self.options.Get("outlist"))
+
+        self.tip.write_popup(self.options.Get("outlist")[row])
+
+    def _setPopulate(self, e):
+        if self.options.Get("pop", False):
+            self.pop.Check(False)
+            self.options.Set("pop", False)
+        else:
+            self.pop.Check(True)
+            self.options.Set("pop", True)
 
     def _setKillmailsFast(self, e):
         """
@@ -445,14 +539,15 @@ class Frame(wx.Frame):
                 r['alliance_name'],
                 r['associates'],
                 '{:.0%}'.format(r['cyno']),
-                '{} ({:.0%})'.format(r['avg_gang'], r['pro_gang'] / (r['processed_killmails'] + 0.01)),
-                '{} ({:.0%})'.format(r['avg_10'], r['pro_10'] / (r['processed_killmails'] + 0.01)),
+                '{}{}'.format(r['last_kill'], 'd' if r['last_kill'] is not None else ''),
+                r['avg_gang'],
+                r['avg_10'],
                 r['timezone'],
                 r['top_space'],
                 r['top_ships'],
                 r['top_gang_ships'],
                 r['top_10_ships'],
-                '{} ({:.0%})'.format(r['boy_scout'], r['boy_scout'] / (r['processed_killmails'] + 0.01)),
+                '{:.0%}'.format(r['boy_scout']),
                 r['super'],
                 r['titan'],
                 '{:.0%}'.format(r['capital_use']),
@@ -491,8 +586,8 @@ class Frame(wx.Frame):
                 colidx += 1
             rowidx += 1
 
-        Logger.info("{} characters analysed, in {} seconds ({} filtered).".format(len(outlist), duration, filtered))
-        statusmsg.push_status("{} characters analysed, in {} seconds ({} filtered). Double click character to go to "
+        Logger.info("{} characters analyzed, in {} seconds ({} filtered).".format(len(outlist), duration, filtered))
+        statusmsg.push_status("{} characters analyzed, in {} seconds ({} filtered). Double click character to go to "
                               "zKillboard.".format(len(outlist), duration, filtered))
 
     def updateStatusbar(self, msg):
@@ -858,3 +953,159 @@ class App(wx.App):
         self.SetTopWindow(self.MyFrame)
         self.MyFrame.Show()
         return True
+
+
+class PilotFrame(wx.Frame):
+    def __init__(self, *args, **kw):
+        wx.Frame.__init__(self, *args, **kw)
+        self.width = self.GetRect()[2]
+        self.height = self.GetRect()[3]
+        self.panel = wx.Panel(self, size=(self.width, self.height))
+        self.panel.SetBackgroundColour((25, 25, 25))
+        self.cur_y = 0
+        self.sizer = wx.BoxSizer(wx.VERTICAL)
+        self.panel.SetSizer(self.sizer)
+
+    def _write_top_header_block(self, txt, alignment, x):
+        rtc = rt.RichTextCtrl(self.panel, size=(self.width / 2, 30), style=wx.NO_BORDER, pos=(x, 0))
+        rtc.EnableVerticalScrollbar(False)
+        rtc.SetCaret(None)
+        rtc.SetBackgroundColour((30, 60, 120))
+
+        rtc.Freeze()
+        rtc.BeginSuppressUndo()
+
+        rtc.BeginBold()
+        rtc.BeginFontSize(11)
+        rtc.BeginTextColour((255, 255, 255))
+        rtc.BeginAlignment(alignment)
+
+        rtc.WriteText(txt)
+        rtc.Newline()
+
+        rtc.EndSuppressUndo()
+        rtc.Thaw()
+
+    def write_top_header(self, pilot_name, allcorp):
+        self._write_top_header_block(pilot_name, wx.TEXT_ALIGNMENT_LEFT, 0)
+        self._write_top_header_block(allcorp, wx.TEXT_ALIGNMENT_RIGHT, self.width / 2)
+        self.cur_y += 30
+
+    def write_popup(self, stats):
+        self._write_row("Average Kill: {}{}".format(round(stats['average_kill_value'] / 1000000), "M"), 2, 0)
+        self._write_row("Average Loss: {}{}".format(round(stats['average_loss_value'] / 1000000), "M"), 1, self.width / 2, 20)
+        self._write_header("Tags")
+        warn = stats['warning'].split(' + ') if stats['warning'] else None
+        if warn is None:
+            self._write_row('', 1, 0, 20)
+        else:
+            for w in warn:
+                self._write_row(w, len(warn), self.width / len(warn) * warn.index(w))
+            self.cur_y += 20
+
+        self._write_header("Details")
+        self._write_row("Space: {}".format(stats['top_space']), 2, 0)
+        self._write_row("Timezone: {}".format(stats['timezone']), 2, self.width / 2, 20)
+        self._write_row("Average Fleet: {}".format(stats['avg_10']), 2, 0)
+        self._write_row("Average Gang: {}".format(stats['avg_gang']), 2, self.width / 2, 20)
+        last_activity = None
+        last_used_ship = None
+        if stats['last_kill'] is not None:
+            last_activity = stats['last_kill']
+            last_used_ship = stats['last_used_ship']
+        if stats['last_loss'] is not None and stats['last_loss'] < last_activity:
+            last_activity = stats['last_loss']
+            last_used_ship = stats['last_lost_ship']
+        self._write_row("Last Activity: {} days ago".format(last_activity if last_activity is not None else None), 2, 0)
+        self._write_row("Last Ship: {}".format(last_used_ship), 2, self.width / 2, 20)
+        self._write_row("Top Regions: {}".format(stats['top_regions']), 1, 0, 20)
+
+        self._write_header("Associations")
+        if stats['associates'] is None:
+            self._write_row('', 1, 0, 20)
+        else:
+            for a in stats['associates'].split(', '):
+                self._write_row(a, 1, 0, 20)
+
+        self._write_header("Favorite Ships")
+        self._write_row("Top Losses: {}".format(stats['top_lost_ships']), 1, 0, 20)
+        self._write_row("Fleet Ships: {}".format(stats['top_10_ships']), 1, 0, 20)
+        self._write_row("Gang Ships: {}".format(stats['top_gang_ships']), 1, 0, 20)
+
+        self._write_header("Recent Kills", 2, align=wx.TEXT_ALIGNMENT_LEFT)
+        if len(stats['last_five_kills']) == 0:
+            self._write_row('', 1, 0)
+        else:
+            for kill in stats['last_five_kills']:
+                self._write_row("{} {} ({} pilots)".format(
+                    datetime.datetime.strftime(kill['killmail_time'], "%m/%d"),
+                    kill['victim_ship'],
+                    kill['attackers']),
+                    1, 0, 20
+                )
+        self.cur_y -= 20 * len(stats['last_five_kills']) + 19
+        self._write_header("Recent Losses", 2, self.width / 2, align=wx.TEXT_ALIGNMENT_LEFT)
+        if len(stats['last_five_losses']) == 0:
+            self._write_row('', 1, 0, 20)
+        else:
+            for kill in stats['last_five_losses']:
+                self._write_row("{} {} ({} pilots)".format(
+                    datetime.datetime.strftime(kill['killmail_time'], "%m/%d"),
+                    kill['victim_ship'],
+                    kill['attackers']),
+                    1, self.width / 2, 20
+                )
+
+        self._write_header("Fetch Time")
+        self._write_row("Retrieved in {} seconds.".format(
+            round(stats['process_time'], 2)), 1, 0, 20)
+
+    def _write_header(self, header, chunks=1, x=0, add_y=19, align=wx.TEXT_ALIGNMENT_CENTER):
+        rtc = rt.RichTextCtrl(self.panel, size=(self.width / chunks, 19), style=wx.NO_BORDER, pos=(x, self.cur_y))
+        rtc.EnableVerticalScrollbar(False)
+        rtc.SetCaret(None)
+        rtc.SetBackgroundColour((30, 60, 120))
+        rtc.SetMargins(5, 1)
+
+        rtc.Freeze()
+        rtc.BeginSuppressUndo()
+
+        rtc.BeginBold()
+        rtc.BeginFontSize(10)
+        rtc.BeginTextColour((255, 255, 255))
+        rtc.BeginAlignment(align)
+
+        rtc.WriteText(header)
+        rtc.Newline()
+
+        rtc.EndSuppressUndo()
+        rtc.Thaw()
+        self.cur_y += add_y
+
+    def _write_row(self, txt, chunks, x, add_y=0):
+        txt = txt.split(':')
+        rtc = rt.RichTextCtrl(self.panel, size=(self.width / chunks, 20), style=wx.NO_BORDER, pos=(x, self.cur_y))
+        rtc.EnableVerticalScrollbar(False)
+        rtc.SetCaret(None)
+        rtc.SetBackgroundColour((25, 25, 25))
+        rtc.SetMargins(5, 2)
+
+        rtc.Freeze()
+        rtc.BeginSuppressUndo()
+
+        rtc.BeginFontSize(9)
+        rtc.BeginAlignment(wx.TEXT_ALIGNMENT_LEFT)
+
+        if len(txt) == 1:
+            rtc.BeginTextColour((247, 160, 55))
+            rtc.WriteText(txt[0])
+        if len(txt) > 1:
+            rtc.BeginTextColour((62, 157, 250))
+            rtc.WriteText(txt[0] + ":")
+            rtc.BeginTextColour((247, 160, 55))
+            rtc.WriteText(txt[1])
+
+        rtc.Newline()
+        rtc.EndSuppressUndo()
+        rtc.Thaw()
+        self.cur_y += add_y

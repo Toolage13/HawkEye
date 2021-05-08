@@ -6,7 +6,7 @@ clipboard, and then passes validated clipboard data to analyze.py for processing
 analyze.py to gui.py for presentation in the gui.
 """
 import analyze
-from eveDB import EveDB
+import config
 import gui
 import logging
 import re
@@ -23,12 +23,12 @@ def watch_clpbd():
     """
     Main app loop, watches clipboard, if valid character names are pasted, call analyze_chars()
     """
-    db = EveDB()
     valid = False
     recent_value = None
     while True:
         clipboard = pyperclip.paste()
         if clipboard != recent_value:
+            config.OPTIONS_OBJECT.Set("show_popup", False)
             pilot_names = clipboard.splitlines()
             for name in pilot_names:
                 valid = check_name_validity(name)
@@ -37,7 +37,7 @@ def watch_clpbd():
             if valid:
                 statusmsg.push_status("Clipboard change detected...")
                 recent_value = clipboard
-                analyze_chars(clipboard.splitlines(), db)
+                analyze_chars(clipboard.splitlines())
         time.sleep(0.5)  # Short sleep between loops to reduce CPU load
 
 
@@ -55,16 +55,15 @@ def check_name_validity(pilot_name):
     return True
 
 
-def analyze_chars(pilot_names, db):
+def analyze_chars(pilot_names):
     """
     Send list of pilot names to analyze.main() and send it to gui.App.MyFrame.grid.sortOutlist()
     :param pilot_names: List of pilot names to process
-    :param db: EveDB object to use for local queries
     """
     start_time = time.time()
     wx.CallAfter(app.MyFrame.grid.ClearGrid)
     try:
-        outlist, filtered = analyze.main(pilot_names, db)
+        outlist, filtered = analyze.main(pilot_names, config.OPTIONS_OBJECT.Get("pop", True))
         duration = round(time.time() - start_time, 1)
         if outlist is not None:
             # Need to use keyword args as sortOutlist can also get called

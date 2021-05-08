@@ -402,6 +402,20 @@ class EveDB:
             self.__local_db.commit()
         return return_values
 
+    def get_pilot_name(self, pilot_id):
+        self.__local_c.execute("select char_name from characters where char_id = ?", (pilot_id,))
+        r = self.__local_c.fetchone()
+        if r is not None:
+            return r[0]
+
+        url = 'https://esi.evetech.net/latest/characters/{}/'.format(pilot_id)
+        headers = {'User-Agent': 'HawkEye, Author: Kain Tarr'}
+        resp = requests.get(url, headers=headers)
+        try:
+            return resp.json()['name']
+        except json.decoder.JSONDecodeError:
+            return None
+
     def get_ship_name(self, i):
         if i in [None, '']:
             return None

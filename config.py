@@ -30,6 +30,8 @@ GUI_TITLE = "HawkEye " + __version__
 CYNO_HL_PERCENTAGE = 0.01
 BLOPS_HL_PERCENTAGE = 0.01
 SB_HL_PERCENTAGE = 0.1
+GATECAMP_HL_PERCENTAGE = 0.25
+CAP_HL_PERCENTAGE = 0.25
 
 
 def resource_path(relative_path):
