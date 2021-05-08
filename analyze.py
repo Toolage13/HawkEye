@@ -25,7 +25,7 @@ def main(pilot_names, populate_all):
     the chunks passed through _concurrent_run_characters(), the result of this is a list of dictionaries containing
     expanded pilot data. Each dictionary is appended to character_stats, which is finally returned.
     :param pilot_names: A list of pilot names to parse
-    :param db: The eveDB to use.
+    :param populate_all: Whether to just grab pilot name and associations, or all data.
     :return character_stats: A list of dictionaries containing expanded pilot data
     """
     with eveDB.EveDB() as db:
@@ -350,10 +350,9 @@ def _prepare_stats(pilot_data, killmails, db):
     """
     Process a list of killmails stored as dictionaries, assign a lot of attributes to stats, then pass to
     _format_stats() for final calculations.
-    :param stats: Stats dictionary to be updated
+    :param pilot_data: Pilot data to use
     :param killmails: List of dictionaries containing killmails
     :param db: EveDB to use
-    :param pilot_id: Pilot ID
     :return: Enriched stats
     """
 

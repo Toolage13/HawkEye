@@ -22,8 +22,6 @@ import wx
 import wx.grid as WXG
 import wx.lib.agw.persist as pm
 import wx.richtext as rt
-import hawkeyestt as STT
-import win32api
 
 Logger = logging.getLogger(__name__)
 

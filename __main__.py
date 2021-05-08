@@ -59,7 +59,6 @@ def analyze_chars(pilot_names):
     """
     Send list of pilot names to analyze.main() and send it to gui.App.MyFrame.grid.sortOutlist()
     :param pilot_names: List of pilot names to process
-    :param db: EveDB object to use for local queries
     """
     start_time = time.time()
     wx.CallAfter(app.MyFrame.grid.ClearGrid)
