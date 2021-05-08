@@ -243,7 +243,7 @@ class Frame(wx.Frame):
             evty = screen_pos[1] + evty + 85
             self.tip = PilotFrame(self, -1,
                                   self.options.Get("outlist")[row]['pilot_name'],
-                                  size=(240, 200),
+                                  size=(270, 200),
                                   style=wx.TRANSPARENT_WINDOW,
                                   pos=(evtx, evty)
                                   )
@@ -967,14 +967,27 @@ class PilotFrame(wx.Frame):
         self._write_header("Tags")
         warn = stats['warning'].split(' + ')
         if warn is None:
-
+            self._write_row('')
+        else:
             for w in warn:
                 print(self.width / len(warn) * warn.index(w))
                 self._write_row_block(w, len(warn), self.width / len(warn) * warn.index(w))
+            self.cur_y += 20
+
+        self._write_header("Details")
+        self._write_row_block("Average Attackers: {}".format(stats['average_pilots']), 2, 0)
+        self._write_row_block("Timezone: {}".format(stats['timezone']), 2, self.width / 2)
         self.cur_y += 20
+        self._write_row_block("Last Activity: {} days".format(stats['last_kill']), 2, 0)
+        self._write_row_block("Last Ship: {}".format('PLACEHOLDER'), 2, self.width / 2)
+        self.cur_y += 20
+
         self._write_header("Associations")
-        for a in stats['associates'].split(', '):
-            self._write_row(a)
+        if stats['associates'] is None:
+            self._write_row('')
+        else:
+            for a in stats['associates'].split(', '):
+                self._write_row(a)
 
         """
                 ', '.join(stats['warning'].replace(' ', '').split(' + ')[:2]),
