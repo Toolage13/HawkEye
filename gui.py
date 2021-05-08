@@ -225,17 +225,14 @@ class Frame(wx.Frame):
         self.__do_layout()
 
     def _mouseMove(self, e):
-        if config.OPTIONS_OBJECT.Set("show_popup", False):
+        if self.options.Set("show_popup", False):
             return
         # Static data
         x, y = self.grid.CalcUnscrolledPosition(e.GetPosition())
         row = self.grid.YToRow(y)
 
-        if self.tip:
-            self.tip.SetEndDelay(.001)
-
         if self.tip and (row == -1 or row != self.prev_row):
-            self.tip.Show(False)
+            self.tip.Destroy()
 
         # if row != self.prev_row and row > -1:
         if row != self.prev_row and row > -1:
@@ -244,36 +241,23 @@ class Frame(wx.Frame):
             evtx, evty = e.GetPosition()
             evtx = screen_pos[0] + evtx + 20
             evty = screen_pos[1] + evty + 85
-            headfont = wx.Font(wx.FontInfo(10).Bold())
-            headfont.SetPointSize(13)
-            msgfont = wx.Font(wx.FontInfo(10))
-            msgfont.SetPointSize(11)
-            # Set up
-            self.tip = STT.SuperToolTip("Loading...")
-            self.tip.EnableTip(True)
-            self.tip.ApplyStyle("HawkEye")
-            self.tip.SetDrawHeaderLine(True)
-            self.tip.SetTarget(self.grid.GetGridWindow())
-            self.tip.SetHeader(self.options.Get("outlist")[row]['pilot_name'])
-            self.tip.SetHeaderFont(headfont)
-            self.tip.SetMessageFont(msgfont)
-            self.tip.Show(True)
-            # Need to come after tip.Show()
-            self.tip.GetTipWindow().MakeWindowTransparent(217)
-            # Need to be very last
-            self.tip.GetTipWindow().setRectWidthHeight(200, 200)
-            self.tip.GetTipWindow().setRectPosition(evtx, evty)
-            self.tip.Update()  # Forces window to draw before calling _populate_popup
-
-            # Populate popup window with data
-            start_time = time.time()
-            self._populate_popup(row, evtx, evty)
-            statusmsg.push_status("Loaded details for {} in {} seconds".format(
-                self.options.Get("outlist")[row]['pilot_name'], round(time.time() - start_time, 2)))
+            self.tip = PilotFrame(self, -1,
+                                  self.options.Get("outlist")[row]['pilot_name'],
+                                  size=(240, 200),
+                                  style=wx.TRANSPARENT_WINDOW,
+                                  pos=(evtx, evty)
+                                  )
+            self._populate_popup(row)
 
         self.prev_row = row
 
-    def _populate_popup(self, row, x, y):
+    def _populate_popup(self, row):
+        self.tip.write_top_header(self.options.Get("outlist")[row]['pilot_name'],
+                                  self.options.Get("outlist")[row]['alliance_name'] if
+                                  self.options.Get("outlist")[row]['alliance_name'] else
+                                  self.options.Get("outlist")[row]['corp_name'])
+        self.tip.Show()
+        self.tip.Update()
         # Get data and add to row if needed
         if self.options.Get("outlist")[row]['warning'] is None:  # Warning of None means it wasn't run
             outlist = self.options.Get("outlist")
@@ -281,36 +265,7 @@ class Frame(wx.Frame):
             self.options.Set("outlist", outlist)
             self.updateList(self.options.Get("outlist"))
 
-        # Populate data
-        self.tip.SetMessage(self._format_popup_message(row))
-        self.tip.GetTipWindow().setRectWidthHeight(200, 200)
-        self.tip.GetTipWindow().setRectPosition(x, y)
-        self.tip.Show(True)
-        self.tip.Update()
-
-    def _format_popup_message(self, row):
-        stats = self.options.Get("outlist")[row]
-        return """
-        Warning: {}
-        Corporation: {}
-        Alliance: {}
-        Associates: {}
-        Activity: {}
-        Timezone: {}
-        Top Ships: {}
-        Average Kill Value: {}{}
-        Last Kills: {}
-        """.format(
-            ', '.join(stats['warning'].replace(' ','').split(' + ')[:2]),
-            stats['corp_name'],
-            stats['alliance_name'],
-            stats['top_space'],
-            stats['timezone'],
-            stats['associates'],
-            stats['top_ships'],
-            round(stats['average_kill_value'] / 1000000), "M",
-            stats['last_five_kills']
-        )
+        self.tip.write_popup(self.options.Get("outlist")[row])
 
     def _setPopulate(self, e):
         if self.options.Get("pop", False):
@@ -973,30 +928,138 @@ class App(wx.App):
 class PilotFrame(wx.Frame):
     def __init__(self, *args, **kw):
         wx.Frame.__init__(self, *args, **kw)
+        self.width = self.GetRect()[2]
+        self.panel = wx.Panel(self, size=(self.width, 200))
+        self.panel.SetBackgroundColour((25, 25, 25))
+        self.cur_y = 0
 
-        self.SetStatusText("Welcome to wx.richtext.RichTextCtrl!")
+    def _write_top_header_block(self, txt, alignment, x):
+        rtc = rt.RichTextCtrl(self.panel, size=(self.width / 2, 30), style=wx.NO_BORDER, pos=(x, 0))
+        rtc.EnableVerticalScrollbar(False)
+        rtc.SetCaret(None)
+        rtc.SetBackgroundColour((25, 25, 25))
 
-        self.rtc = rt.RichTextCtrl(self, style=wx.VSCROLL | wx.HSCROLL | wx.NO_BORDER);
-        wx.CallAfter(self.rtc.SetFocus)
+        rtc.Freeze()
+        rtc.BeginSuppressUndo()
 
-        self.rtc.Freeze()
-        self.rtc.BeginSuppressUndo()
+        rtc.BeginBold()
+        rtc.BeginFontSize(10)
+        rtc.BeginTextColour((62, 157, 250))
+        rtc.BeginAlignment(alignment)
 
-        self.rtc.BeginParagraphSpacing(0, 20)
-        self.rtc.BeginAlignment(rt.TEXT_ALIGNMENT_LEFT)
-        self.rtc.BeginBold()
-        self.rtc.BeginLineSpacing(rt.TEXT_ATTR_LINE_SPACING_HALF)
-        self.rtc.BeginFontSize(14)
+        rtc.WriteText(txt)
+        rtc.Newline()
 
-        self.rtc.WriteText("Welcome to wxRichTextCtrl, a wxWidgets control for editing and presenting styled text and images")
-        self.rtc.EndFontSize()
-        self.rtc.Newline()
+        rtc.EndBold()
+        rtc.EndFontSize()
+        rtc.EndTextColour()
+        rtc.EndAlignment()
 
-        self.rtc.EndParagraphSpacing()
-        self.rtc.EndAlignment()
-        self.rtc.EndBold()
-        self.rtc.EndLineSpacing()
-        self.rtc.EndFontSize()
+        rtc.EndSuppressUndo()
+        rtc.Thaw()
 
-        self.rtc.EndSuppressUndo()
-        self.rtc.Thaw()
+    def write_top_header(self, pilot_name, allcorp):
+        self._write_top_header_block(pilot_name, wx.TEXT_ALIGNMENT_LEFT, 0)
+        self._write_top_header_block(allcorp, wx.TEXT_ALIGNMENT_RIGHT, self.width / 2)
+        self.cur_y += 30
+
+    def write_popup(self, stats):
+        self._write_header("Tags")
+        warn = stats['warning'].split(' + ')
+        if warn is None:
+
+            for w in warn:
+                print(self.width / len(warn) * warn.index(w))
+                self._write_row_block(w, len(warn), self.width / len(warn) * warn.index(w))
+        self.cur_y += 20
+        self._write_header("Associations")
+        for a in stats['associates'].split(', '):
+            self._write_row(a)
+
+        """
+                ', '.join(stats['warning'].replace(' ', '').split(' + ')[:2]),
+                stats['corp_name'],
+                stats['alliance_name'],
+                stats['top_space'],
+                stats['timezone'],
+                stats['associates'],
+                stats['top_ships'],
+                round(stats['average_kill_value'] / 1000000), "M",
+                stats['last_five_kills']
+        """
+
+    def _write_header(self, header):
+        rtc = rt.RichTextCtrl(self.panel, size=(self.width, 17), style=wx.NO_BORDER, pos=(0, self.cur_y))
+        rtc.EnableVerticalScrollbar(False)
+        rtc.SetCaret(None)
+        rtc.SetBackgroundColour((30, 60, 120))
+        rtc.SetMargins(1, 1)
+
+        rtc.Freeze()
+        rtc.BeginSuppressUndo()
+
+        rtc.BeginBold()
+        rtc.BeginFontSize(9.5)
+        rtc.BeginTextColour((255, 255, 255))
+        rtc.BeginAlignment(wx.TEXT_ALIGNMENT_CENTER)
+
+        rtc.WriteText(header)
+        rtc.Newline()
+
+        rtc.EndBold()
+        rtc.EndFontSize()
+        rtc.EndTextColour()
+        rtc.EndAlignment()
+
+        rtc.EndSuppressUndo()
+        rtc.Thaw()
+        self.cur_y += 17
+
+    def _write_row(self, txt):
+        rtc = rt.RichTextCtrl(self.panel, size=(self.width, 20), style=wx.NO_BORDER, pos=(0, self.cur_y))
+        rtc.EnableVerticalScrollbar(False)
+        rtc.SetCaret(None)
+        rtc.SetBackgroundColour((25, 25, 25))
+        rtc.SetMargins(5, 2)
+
+        rtc.Freeze()
+        rtc.BeginSuppressUndo()
+
+        rtc.BeginFontSize(8.5)
+        rtc.BeginTextColour((247, 160, 55))
+        rtc.BeginAlignment(wx.TEXT_ALIGNMENT_LEFT)
+
+        rtc.WriteText(txt)
+        rtc.Newline()
+
+        rtc.EndFontSize()
+        rtc.EndTextColour()
+        rtc.EndAlignment()
+
+        rtc.EndSuppressUndo()
+        rtc.Thaw()
+        self.cur_y += 20
+
+    def _write_row_block(self, txt, chunks, x):
+        rtc = rt.RichTextCtrl(self.panel, size=(self.width / chunks, 20), style=wx.NO_BORDER, pos=(x, self.cur_y))
+        rtc.EnableVerticalScrollbar(False)
+        rtc.SetCaret(None)
+        rtc.SetBackgroundColour((25, 25, 25))
+        rtc.SetMargins(5, 2)
+
+        rtc.Freeze()
+        rtc.BeginSuppressUndo()
+
+        rtc.BeginFontSize(8.5)
+        rtc.BeginTextColour((247, 160, 55))
+        rtc.BeginAlignment(wx.TEXT_ALIGNMENT_LEFT)
+
+        rtc.WriteText(txt)
+        rtc.Newline()
+
+        rtc.EndFontSize()
+        rtc.EndTextColour()
+        rtc.EndAlignment()
+
+        rtc.EndSuppressUndo()
+        rtc.Thaw()

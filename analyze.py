@@ -346,6 +346,7 @@ def _prepare_stats(pilot_data, killmails, db):
     :param pilot_id: Pilot ID
     :return: Enriched stats
     """
+
     stats = _get_stats_dictionary(pilot_data)
     for killmail in killmails:
         stats['processed_killmails'] += 1
@@ -378,14 +379,12 @@ def _prepare_stats(pilot_data, killmails, db):
         # Add to our list of recent kills
         if len(stats['last_five_kills']) < 5:
             stats['last_five_kills'].append({
-                'victim': db.get_pilot_name(killmail['victim'].get('character_id')),
+                # 'victim': db.get_pilot_name(killmail['victim'].get('character_id')),
                 'victim_ship' : db.get_ship_name(killmail['victim']['ship_type_id']),
                 'attackers': len(killmail['attackers']),
                 'killed_when': (datetime.date.today() - datetime.datetime.strptime(
                     killmail['killmail_time'].split('T')[0], '%Y-%m-%d').date()).days
             })
-
-
 
         # Kill attributes (using certain ships etc.)
         if db.killed_on_gate(killmail) and not(db.used_capital(killmail['attackers'], pilot_data['pilot_id'])) and not(

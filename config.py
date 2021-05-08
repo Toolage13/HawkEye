@@ -114,7 +114,7 @@ logging and this config. Then get a new logger at the beginning
 of the module like this: "Logger = logging.getLogger(__name__)" and
 produce log messages like this: "Logger.error("text", exc_info=True)"
 """
-LOG_DETAIL = 'ERROR'
+LOG_DETAIL = 'INFO'
 
 LOG_DICT = {
     'version': 1,
