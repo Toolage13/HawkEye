@@ -228,32 +228,37 @@ class Frame(wx.Frame):
 
     def _on_timer(self):
         if self.tip is not None:
-            x, y, w, h = self.GetRect()
+            x, y, w, h = self.grid.GetRect()
+            x, y = self.grid.GetScreenPosition()
             mx, my = wx.GetMousePosition()
             if mx < x:  # Mouse is left of window
                 try:
                     self.tip.Destroy()
+                    self.prev_row = -1
                 except RuntimeError:
                     pass
             elif mx > x + w:  # Mouse is right of window
                 try:
                     self.tip.Destroy()
+                    self.prev_row = -1
                 except RuntimeError:
                     pass
-            elif my < y:  # Mouse is above window
+            elif my - 20 < y:  # Mouse is above window
                 try:
                     self.tip.Destroy()
+                    self.prev_row = -1
                 except RuntimeError:
                     pass
             elif my > y + h:  # Mouse is below window
                 try:
                     self.tip.Destroy()
+                    self.prev_row = -1
                 except RuntimeError:
                     pass
         wx.CallLater(20, self._on_timer)
 
     def _mouseMove(self, e):
-        if self.options.Set("show_popup", False):
+        if self.options.Get("show_popup", False):
             return
         # Static data
         x, y = self.grid.CalcUnscrolledPosition(e.GetPosition())
@@ -276,6 +281,8 @@ class Frame(wx.Frame):
                                   style=wx.TRANSPARENT_WINDOW | wx.FRAME_NO_TASKBAR,
                                   pos=(evtx, evty)
                                   )
+            if self.options.Get("StayOnTop", False):
+                self.tip.ToggleWindowStyle(wx.STAY_ON_TOP)
             self._populate_popup(row)
 
         self.prev_row = row
@@ -294,7 +301,6 @@ class Frame(wx.Frame):
             outlist[row] = analyze.main([outlist[row]['pilot_name']], True)[0][0]
             self.options.Set("outlist", outlist)
             self.updateList(self.options.Get("outlist"))
-
         self.tip.write_popup(self.options.Get("outlist")[row])
 
     def _setPopulate(self, e):
