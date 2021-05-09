@@ -34,7 +34,7 @@ def main(pilot_names, populate_all):
             character_stats = []
             for pilot in filtered_pilot_data:
                 character_stats.append(_get_stats_dictionary(pilot, True))
-            return character_stats, len(filtered_pilot_data) - len(pilot_names)
+            return character_stats, len(pilot_names) - len(filtered_pilot_data)
 
         if len(filtered_pilot_data) == 0:
             Logger.warning('Filtered out all pilots provided...')
@@ -64,7 +64,7 @@ def main(pilot_names, populate_all):
                             e[k] = c[k]
                         break
 
-        return character_stats, len(filtered_pilot_data) - len(pilot_names)
+        return character_stats, len(pilot_names) - len(filtered_pilot_data)
 
 
 def _filter_pilots(pilot_names, db):
