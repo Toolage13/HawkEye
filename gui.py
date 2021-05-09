@@ -133,7 +133,11 @@ class Frame(wx.Frame):
         # Options Menubar
         self.opt_menu = wx.Menu()
 
-        self.pop = self.opt_menu.AppendCheckItem(wx.ID_ANY, "&Populate All Fields\tCTRL+P")
+        self.show_popup = self.opt_menu.AppendCheckItem(wx.ID_ANY, "&Show Popups\tCTRL+P")
+        self.opt_menu.Bind(wx.EVT_MENU, self._togglePopup, self.show_popup)
+        self.show_popup.Check(self.options.Get("show_popup", True))
+
+        self.pop = self.opt_menu.AppendCheckItem(wx.ID_ANY, "&Populate All Fields\tCTRL+A")
         self.opt_menu.Bind(wx.EVT_MENU, self._setPopulate, self.pop)
         self.pop.Check(self.options.Get("pop", True))
 
@@ -229,6 +233,9 @@ class Frame(wx.Frame):
 
         # Start check to kill popups
         self._on_timer()
+
+    def _togglePopup(self, e):
+        self.options.Set("show_popup", self.show_popup.IsChecked())
 
     def _on_timer(self):
         if self.tip is not None:
@@ -675,7 +682,7 @@ class Frame(wx.Frame):
                            item_ig_corp
                            )
 
-            if alliance_name != 'None':
+            if alliance_name is not None:
                 item_ig_alliance = self.menu.Append(wx.ID_ANY, "Ignore alliance: '" + alliance_name + "'")
                 self.menu.Bind(wx.EVT_MENU,
                                lambda evt,
@@ -730,7 +737,7 @@ class Frame(wx.Frame):
                     item_hl_corp
                 )
 
-            if alliance_name != 'None':
+            if alliance_name is not None:
                 if not hl_alliance:
                     item_hl_alliance = self.menu.Append(wx.ID_ANY, "Highlight alliance: '" + alliance_name + "'")
                     self.menu.Bind(
