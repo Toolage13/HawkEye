@@ -277,12 +277,11 @@ class Frame(wx.Frame):
         row = self.grid.YToRow(y)
         mx, my = wx.GetMousePosition()
 
-
         if self.tip and (row == -1 or row != self.prev_row):
             self.tip.Destroy()
 
         if row != self.prev_row and row > -1:
-            time.sleep(0.5)
+            time.sleep(0.3)
             if (mx, my) != wx.GetMousePosition():
                 return
             self.tip = PilotFrame(self, -1,
