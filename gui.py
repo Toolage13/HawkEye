@@ -7,8 +7,9 @@ This is the GUI file, it has an App class which just displays the Frame, and the
 the details on how the GUI is made. The GUI contains numerous methods for various user interaction responses.
 
 TODO
-# Add in HIC highlighting / warning
-# Add in all the different loss columns
+# * Add in HIC highlighting / warning
+# * Add in all the different loss columns
+# * Prevent menu from closing when clicking options
 """
 import aboutdialog
 import analyze
@@ -274,23 +275,21 @@ class Frame(wx.Frame):
         # Static data
         x, y = self.grid.CalcUnscrolledPosition(e.GetPosition())
         row = self.grid.YToRow(y)
+        mx, my = wx.GetMousePosition()
+
 
         if self.tip and (row == -1 or row != self.prev_row):
             self.tip.Destroy()
 
-        # if row != self.prev_row and row > -1:
         if row != self.prev_row and row > -1:
             time.sleep(0.5)
-            # Static setup
-            screen_pos = self.GetPosition()
-            evtx, evty = e.GetPosition()
-            evtx = screen_pos[0] + evtx + 20
-            evty = screen_pos[1] + evty + 85
+            if (mx, my) != wx.GetMousePosition():
+                return
             self.tip = PilotFrame(self, -1,
                                   self.options.Get("outlist")[row]['pilot_name'],
                                   size=(360, 505),
                                   style=wx.TRANSPARENT_WINDOW | wx.FRAME_NO_TASKBAR,
-                                  pos=(evtx, evty)
+                                  pos=(mx + 10, my + 10)
                                   )
             if self.options.Get("StayOnTop", False):
                 self.tip.ToggleWindowStyle(wx.STAY_ON_TOP)
