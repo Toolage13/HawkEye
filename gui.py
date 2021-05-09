@@ -1032,10 +1032,8 @@ class PilotFrame(wx.Frame):
         self._write_row("Last Ship: {}".format(last_used_ship), 2, self.width / 2, 20)
         self._write_row("Top Regions: {}".format(stats['top_regions']), 1, 0, 20)
 
-        self._write_header("Associations")
-        if stats['associates'] is None:
-            self._write_row('', 1, 0, 20)
-        else:
+        if stats['associates'] is not None:
+            self._write_header("Associations")
             for a in stats['associates'].split(', '):
                 self._write_row(a, 1, 0, 20)
 
