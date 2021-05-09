@@ -375,6 +375,8 @@ class EveDB:
         return pilot_map
 
     def get_affil_names(self, allcorp_ids):
+        if allcorp_ids is None:
+            return None
         allcorp_ids = [i for i in allcorp_ids if i]
         return_values = []
         self.__local_c.execute("select entity_id, entity_name, last_update from entities where entity_id in ({})".format(

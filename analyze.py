@@ -239,7 +239,7 @@ def _get_stats_dictionary(pilot_data, ret_blank=False):
         'top_ships': None,
         'top_space': {},
         'ustz': {'kills': 0.01, 'attackers': 0},
-        'warning': '',
+        'warning': None,
         'wormhole': 0
     }
     if ret_blank:
@@ -248,7 +248,6 @@ def _get_stats_dictionary(pilot_data, ret_blank=False):
         stats['ordered_losses'] = None
         stats['query'] = False
         stats['top_space'] = None
-        stats['warning'] = None
     return stats
 
 
@@ -473,15 +472,19 @@ def _format_stats(stats, db):
     stats['average_pilots'] = round(stats['average_pilots'] / (stats['processed_killmails'] + 0.01))
     stats['avg_10'] = round(stats['avg_10'] / (stats['pro_10'] + 0.01))
     stats['avg_gang'] = round(stats['avg_gang'] / (stats['pro_gang'] + 0.01))
-    stats['top_ships'] = ', '.join(
-        s for s in [db.get_ship_name(i) for i in _get_top_three(stats['top_ships'])] if s is not None)
-    stats['top_10_ships'] = ', '.join(
-        s for s in [db.get_ship_name(i) for i in _get_top_three(stats['top_10_ships'])] if s is not None)
-    stats['top_gang_ships'] = ', '.join(
-        s for s in [db.get_ship_name(i) for i in _get_top_three(stats['top_gang_ships'])] if s is not None)
+    if stats['top_ships'] is not None:
+        stats['top_ships'] = ', '.join(
+            s for s in [db.get_ship_name(i) for i in _get_top_three(stats['top_ships'])] if s is not None)
+    if stats['top_10_ships'] is not None:
+        stats['top_10_ships'] = ', '.join(
+            s for s in [db.get_ship_name(i) for i in _get_top_three(stats['top_10_ships'])] if s is not None)
+    if stats['top_gang_ships'] is not None:
+        stats['top_gang_ships'] = ', '.join(
+            s for s in [db.get_ship_name(i) for i in _get_top_three(stats['top_gang_ships'])] if s is not None)
 
     # Location and timezone
-    stats['top_regions'] = ', '.join(r for r in _get_top_three(stats['top_regions']) if r not in [None, ''])
+    if stats['top_regions'] is not None:
+        stats['top_regions'] = ', '.join(r for r in _get_top_three(stats['top_regions']) if r not in [None, ''])
     timezone = 'autz'
     for tz in ['eutz', 'ustz']:
         if stats[tz]['kills'] > stats[timezone]['kills']:
@@ -525,7 +528,7 @@ def _format_stats(stats, db):
 
     # Associates
     stats['associates'] = _get_associates(stats['associates'], db)
-    stats['associates'] = ', '.join(n for n in stats['associates'])
+    stats['associates'] = ', '.join(n for n in stats['associates']) if stats['associates'] else None
     return stats
 
 
@@ -545,21 +548,21 @@ def _get_top_three(d):
                     break
             if r not in sorted_categories:
                 sorted_categories.append(r)
-        while len(sorted_categories) < 3:
-            sorted_categories.append('')
         return sorted_categories[:3]
     except:
-        return ['', '', '']
+        return None
 
 
 def _add_string(o, n):
-    if o == '':
+    if o is None:
         return n
     return '{} + {}'.format(o, n)
 
 
 def _get_associates(associates, db):
     associates = _get_top_three(associates)
+    if associates is None:
+        return None
     affil_names = db.get_affil_names(associates)
     for entity_id in associates:
         for entity in affil_names:

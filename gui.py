@@ -1004,11 +1004,9 @@ class PilotFrame(wx.Frame):
     def write_popup(self, stats):
         self._write_row("Average Kill: {}{}".format(round(stats['average_kill_value'] / 1000000), "M"), 2, 0)
         self._write_row("Average Loss: {}{}".format(round(stats['average_loss_value'] / 1000000), "M"), 1, self.width / 2, 20)
-        self._write_header("Tags")
         warn = stats['warning'].split(' + ') if stats['warning'] else None
-        if warn is None:
-            self._write_row('', 1, 0, 20)
-        else:
+        if warn is not None:
+            self._write_header("Tags")
             for w in warn:
                 self._write_row(w, len(warn), self.width / len(warn) * warn.index(w))
             self.cur_y += 20
@@ -1023,9 +1021,13 @@ class PilotFrame(wx.Frame):
         if stats['last_kill'] is not None:
             last_activity = stats['last_kill']
             last_used_ship = stats['last_used_ship']
-        if stats['last_loss'] is not None and stats['last_loss'] < last_activity:
+        if stats['last_loss'] is not None and last_activity is None:
             last_activity = stats['last_loss']
             last_used_ship = stats['last_lost_ship']
+        elif stats['last_loss'] < last_activity:
+            last_activity = stats['last_loss']
+            last_used_ship = stats['last_lost_ship']
+
         self._write_row("Last Activity: {} days ago".format(last_activity if last_activity is not None else None), 2, 0)
         self._write_row("Last Ship: {}".format(last_used_ship), 2, self.width / 2, 20)
         self._write_row("Top Regions: {}".format(stats['top_regions']), 1, 0, 20)
