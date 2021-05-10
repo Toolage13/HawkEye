@@ -10,6 +10,9 @@ TODO
 # * Add in HIC highlighting / warning
 # * Add in all the different loss columns
 # * Prevent menu from closing when clicking options
+# * Fix save resized window issue.
+# * Add in feature to scroll through recent runs
+# * Add in hotkey or button to stop current run
 """
 import aboutdialog
 import analyze
@@ -134,6 +137,10 @@ class Frame(wx.Frame):
         # Options Menubar
         self.opt_menu = wx.Menu()
 
+        self.auto_collapse = self.opt_menu.AppendCheckItem(wx.ID_ANY, "&Auto Collapse\tCTRL+C")
+        self.opt_menu.Bind(wx.EVT_MENU, self._toggle_collapse, self.auto_collapse)
+        self.auto_collapse.Check(self.options.Get("auto_collapse", False))
+
         self.show_popup = self.opt_menu.AppendCheckItem(wx.ID_ANY, "&Show Popups\tCTRL+P")
         self.opt_menu.Bind(wx.EVT_MENU, self._togglePopup, self.show_popup)
         self.show_popup.Check(self.options.Get("show_popup", True))
@@ -232,8 +239,12 @@ class Frame(wx.Frame):
         # Set transparency based off restored slider
         self.__do_layout()
 
-        # Start check to kill popups
+        # Start check to kill popups and check for whether we should collapse the bar
+        self.SetRect((self.options.Get("width", 720), self.options.Get("height", 400)))
+        self.collapsed = False
+        self.startup = True
         self._on_timer()
+        self._collapse_timer()
 
     def _togglePopup(self, e):
         self.options.Set("show_popup", self.show_popup.IsChecked())
@@ -267,7 +278,38 @@ class Frame(wx.Frame):
                     self.prev_row = -1
                 except RuntimeError:
                     pass
+
         wx.CallLater(20, self._on_timer)
+
+    def _collapse_timer(self):
+        if self.startup:  # If the app is starting give a little bit of time for user to find the window
+            self.startup = False
+            wx.CallLater(2000, self._collapse_timer)
+            return
+        if self.options.Get("auto_collapse", False):
+            mx, my = wx.GetMousePosition()
+            rect = self.GetRect()
+            xmin = rect[0]
+            ymin = rect[1]
+            xmax = rect[0] + rect[2]
+            ymax = rect[1] + rect[3]
+
+            if self.collapsed:
+                if xmin < mx < xmax and ymin < my < ymax:
+                    self.SetSize((rect[2], self.options.Get("height", 400)))
+                    self.collapsed = False
+            else:
+                if mx < xmin or mx > xmax or my < ymin or my > ymax:
+                    time.sleep(0.5)
+                    mx, my = wx.GetMousePosition()
+                    if mx < xmin or mx > xmax or my < ymin or my > ymax:
+                        self.options.Set("height", rect[3])
+                        self.SetSize((rect[2], 0))
+                        self.collapsed = True
+        wx.CallLater(20, self._collapse_timer)
+
+    def _toggle_collapse(self, e):
+        self.options.Set("auto_collapse", self.auto_collapse.IsChecked())
 
     def _mouseMove(self, e):
         if not self.options.Get("show_popup", False):
@@ -942,6 +984,11 @@ class Frame(wx.Frame):
         self.options.Set("DarkMode", self.dark_mode.IsChecked())
         # Delete last outlist and NPSIList
         self.options.Set("outlist", None)
+        # Set original x (width) in pickle, and set y if the window is not collapsed.
+        x, y = self.GetSize()
+        self.options.Set("width", x)
+        if not self.collapsed:
+            self.options.Set("height", y)
         # Write pickle container to disk
         self.options.Save()
         event.Skip() if event else False
