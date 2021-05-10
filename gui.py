@@ -13,6 +13,8 @@ TODO
 # * Fix save resized window issue.
 # * Add in feature to scroll through recent runs
 # * Add in hotkey or button to stop current run
+# * Check if pilots on list were in previous run, don't re-run them unnecessarily
+# * Prevent hiding window if menubar open
 """
 import aboutdialog
 import analyze
@@ -295,20 +297,34 @@ class Frame(wx.Frame):
             ymax = rect[1] + rect[3]
 
             if self.collapsed:
+                addx, addy = self.tempwindow.GetSize()
+
+                xmax = rect[0] + addx
+                ymax = rect[1] + addy
                 if xmin < mx < xmax and ymin < my < ymax:
-                    self.SetSize((rect[2], self.options.Get("height", 400)))
+                    # Restore original window
+                    self.tempwindow.Destroy()
+                    self.Show()
                     self.collapsed = False
                     statusmsg.push_status("Restored window...")
             else:
                 if mx < xmin or mx > xmax or my < ymin or my > ymax:
-                    time.sleep(0.5)
+                    time.sleep(0.2)
                     mx, my = wx.GetMousePosition()
                     if mx < xmin or mx > xmax or my < ymin or my > ymax:
-                        self.options.Set("height", rect[3])
-                        self.SetSize((rect[2], 75))
+                        self._create_tempwindow(86, xmin + 7, ymin)
+                        self.Hide()
                         self.collapsed = True
-                        statusmsg.push_status("Collapsed, mouse over here to restore...")
         wx.CallLater(20, self._collapse_timer)
+
+    def _create_tempwindow(self, width, xmin, ymin):
+        self.tempwindow = TempWindow(self, -1, "HawkEye",
+                                   size=(width, 25),
+                                   style=wx.FRAME_NO_WINDOW_MENU | wx.STAY_ON_TOP,
+                                   pos=(xmin, ymin)
+                                   )
+        self.tempwindow.Setup()
+        self.tempwindow.Show()
 
     def _toggle_collapse(self, e):
         self.options.Set("auto_collapse", self.auto_collapse.IsChecked())
@@ -325,7 +341,7 @@ class Frame(wx.Frame):
             self.tip.Destroy()
 
         if row != self.prev_row and row > -1:
-            time.sleep(0.3)
+            time.sleep(0.1)
             if (mx, my) != wx.GetMousePosition():
                 return
             self.tip = PilotFrame(self, -1,
@@ -1022,8 +1038,6 @@ class PilotFrame(wx.Frame):
         self.panel = wx.Panel(self, size=(self.width, self.height))
         self.panel.SetBackgroundColour((25, 25, 25))
         self.cur_y = 0
-        self.sizer = wx.BoxSizer(wx.VERTICAL)
-        self.panel.SetSizer(self.sizer)
 
     def _write_top_header_block(self, txt, alignment, x):
         rtc = rt.RichTextCtrl(self.panel, size=(self.width / 2, 30), style=wx.NO_BORDER, pos=(x, 0))
@@ -1168,3 +1182,28 @@ class PilotFrame(wx.Frame):
         rtc.EndSuppressUndo()
         rtc.Thaw()
         self.cur_y += add_y
+
+class TempWindow(wx.Frame):
+    def __init__(self, *args, **kw):
+        wx.Frame.__init__(self, *args, **kw)
+        self.panel = wx.Panel(self, size=(self.GetRect()[2], self.GetRect()[3]))
+
+    def Setup(self):
+        rtc = rt.RichTextCtrl(self.panel, size=(self.GetRect()[2], self.GetRect()[3]),
+                              style=wx.NO_BORDER)
+        rtc.EnableVerticalScrollbar(False)
+        rtc.SetCaret(None)
+        rtc.SetBackgroundColour((25, 25, 25))
+
+        rtc.Freeze()
+        rtc.BeginSuppressUndo()
+
+        rtc.SetMargins(5, 1)
+        rtc.BeginBold()
+        rtc.BeginFontSize(11)
+        rtc.BeginTextColour((247, 160, 55))
+
+        rtc.WriteText("HAWKEYE")
+
+        rtc.EndSuppressUndo()
+        rtc.Thaw()
