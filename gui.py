@@ -298,14 +298,16 @@ class Frame(wx.Frame):
                 if xmin < mx < xmax and ymin < my < ymax:
                     self.SetSize((rect[2], self.options.Get("height", 400)))
                     self.collapsed = False
+                    statusmsg.push_status("Restored window...")
             else:
                 if mx < xmin or mx > xmax or my < ymin or my > ymax:
                     time.sleep(0.5)
                     mx, my = wx.GetMousePosition()
                     if mx < xmin or mx > xmax or my < ymin or my > ymax:
                         self.options.Set("height", rect[3])
-                        self.SetSize((rect[2], 0))
+                        self.SetSize((rect[2], 75))
                         self.collapsed = True
+                        statusmsg.push_status("Collapsed, mouse over here to restore...")
         wx.CallLater(20, self._collapse_timer)
 
     def _toggle_collapse(self, e):
