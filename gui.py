@@ -14,7 +14,6 @@ TODO
 # * Add in feature to scroll through recent runs
 # * Add in hotkey or button to stop current run
 # * Check if pilots on list were in previous run, don't re-run them unnecessarily
-# * Prevent hiding window if menubar open
 """
 import aboutdialog
 import analyze
@@ -241,12 +240,19 @@ class Frame(wx.Frame):
         # Set transparency based off restored slider
         self.__do_layout()
 
+        # See if menu state is open or closed.
+        self.menuopen = False
+        self.Bind(wx.EVT_MENU_OPEN, self._toggleMenuOpen)
+        self.Bind(wx.EVT_MENU_CLOSE, self._toggleMenuOpen)
+
         # Start check to kill popups and check for whether we should collapse the bar
-        self.SetRect((self.options.Get("width", 720), self.options.Get("height", 400)))
         self.collapsed = False
         self.startup = True
         self._on_timer()
         self._collapse_timer()
+
+    def _toggleMenuOpen(self, e):
+        self.menuopen = not(self.menuopen)
 
     def _togglePopup(self, e):
         self.options.Set("show_popup", self.show_popup.IsChecked())
@@ -287,6 +293,9 @@ class Frame(wx.Frame):
         if self.startup:  # If the app is starting give a little bit of time for user to find the window
             self.startup = False
             wx.CallLater(2000, self._collapse_timer)
+            return
+        if self.menuopen:
+            wx.CallLater(20, self._collapse_timer)
             return
         if self.options.Get("auto_collapse", False):
             mx, my = wx.GetMousePosition()
@@ -510,9 +519,13 @@ class Frame(wx.Frame):
         """
         # For each column, create show / hide menu items, if hideable
         self.col_menu_items = [[] for i in self.columns]
+        added_count = 0
         for col in self.columns:
             if not col[4]:  # Do not add menu item if column not hideable
                 continue
+            if added_count > 0 and added_count % 5 == 0:
+                self.view_menu.Break()
+                added_count += 1
             index = col[0]
             options_key = "Show" + col[1]
             menu_name = "Show " + col[6]
@@ -1002,11 +1015,6 @@ class Frame(wx.Frame):
         self.options.Set("DarkMode", self.dark_mode.IsChecked())
         # Delete last outlist and NPSIList
         self.options.Set("outlist", None)
-        # Set original x (width) in pickle, and set y if the window is not collapsed.
-        x, y = self.GetSize()
-        self.options.Set("width", x)
-        if not self.collapsed:
-            self.options.Set("height", y)
         # Write pickle container to disk
         self.options.Save()
         event.Skip() if event else False
