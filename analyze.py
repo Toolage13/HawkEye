@@ -39,7 +39,7 @@ def main(pilot_names, populate_all):
         if len(filtered_pilot_data) == 0:
             Logger.warning('Filtered out all pilots provided...')
             statusmsg.push_status("Filtered out all pilots provided...")
-            return None
+            return (None, None)
 
         character_stats = []
         for chunk in divide_chunks(filtered_pilot_data, config.MAX_CHUNK):
@@ -79,7 +79,7 @@ def _filter_pilots(pilot_names, db):
     ignore_list = config.OPTIONS_OBJECT.Get("ignoredList", default=[])
     filtered_by_name = [p for p in pilot_names if p not in [i[1] for i in ignore_list]]
     if len(filtered_by_name) == 0:
-        return []
+        return None
 
     start_time = time.time()
     Logger.info('Retrieving {} pilot IDs from CCP...'.format(len(filtered_by_name)))

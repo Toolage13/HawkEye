@@ -62,7 +62,7 @@ def analyze_chars(pilot_names):
     :param pilot_names: List of pilot names to process
     """
     start_time = time.time()
-    wx.CallAfter(app.MyFrame.grid.ClearGrid)
+    # wx.CallAfter(app.MyFrame.grid.ClearGrid)
     try:
         outlist, filtered = analyze.main(pilot_names, config.OPTIONS_OBJECT.Get("pop", True))
         duration = round(time.time() - start_time, 1)
