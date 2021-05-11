@@ -10,8 +10,6 @@ TODO
 # * Add in HIC highlighting / warning
 # * Add in all the different loss columns
 # * Prevent menu from closing when clicking options
-# * Add in feature to scroll through recent runs
-# * Add in hotkey or button to stop current run
 # * Check if pilots on list were in previous run, don't re-run them unnecessarily
 """
 import aboutdialog
