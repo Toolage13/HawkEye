@@ -15,6 +15,7 @@ import time
 import wx
 import pyperclip
 import statusmsg
+import updatedialog
 
 Logger = logging.getLogger(__name__)
 
@@ -87,6 +88,8 @@ def analyze_chars(pilot_names):
 config.OPTIONS_OBJECT.Set("outlist", [])
 config.OPTIONS_OBJECT.Set("index", -1)
 app = gui.App(0)
+if updatedialog.CheckVersion():
+    app.MyFrame._ShowUpdate()
 background_thread = threading.Thread(target=watch_clpbd, daemon=True)
 background_thread.start()
 app.MainLoop()

@@ -23,13 +23,12 @@ import shutil
 import sortarray
 import statusmsg
 import time
+import updatedialog
 import webbrowser
 import wx
 import wx.grid as WXG
 import wx.lib.agw.persist as pm
 import wx.richtext as rt
-import wx.lib.platebtn as pb
-import wx.lib.buttons as buttons
 
 Logger = logging.getLogger(__name__)
 
@@ -271,6 +270,9 @@ class Frame(wx.Frame):
         self.grid.SetFocus()
         self.current_index = 0
         self.options.Set("outlist", [])
+
+    def _ShowUpdate(self):
+        updatedialog.showUpdateBox(self)
 
     def _StopClick(self, e):
         self.options.Set("stop", True)
