@@ -11,6 +11,7 @@ TODO
 # * Add in all the different loss columns
 # * Prevent menu from closing when clicking options
 # * Check if pilots on list were in previous run, don't re-run them unnecessarily
+# * Tag cyno ventures (indy cyno)
 """
 import aboutdialog
 import analyze
@@ -358,7 +359,6 @@ class Frame(wx.Frame):
                     self.tempwindow.Destroy()
                     self.Show()
                     self.collapsed = False
-                    statusmsg.push_status("Restored window...")
             else:
                 if mx < xmin or mx > xmax or my < ymin or my > ymax:
                     time.sleep(0.2)
