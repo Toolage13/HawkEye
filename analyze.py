@@ -34,6 +34,8 @@ def main(pilot_names, populate_all):
             character_stats = []
             for pilot in filtered_pilot_data:
                 character_stats.append(_get_stats_dictionary(pilot, True))
+                for character in character_stats:
+                    character['query'] = False
             return character_stats, len(pilot_names) - len(filtered_pilot_data)
 
         if len(filtered_pilot_data) == 0:
@@ -64,6 +66,10 @@ def main(pilot_names, populate_all):
                             e[k] = c[k]
                         break
 
+        for char in character_stats:
+            if config.OPTIONS_OBJECT.Get("stop"):
+                char['query'] = False
+
         return character_stats, len(pilot_names) - len(filtered_pilot_data)
 
 
@@ -78,6 +84,8 @@ def _filter_pilots(pilot_names, db):
     """
     ignore_list = config.OPTIONS_OBJECT.Get("ignoredList", default=[])
     filtered_by_name = [p for p in pilot_names if p not in [i[1] for i in ignore_list]]
+    if filtered_by_name is None:
+        return None
     if len(filtered_by_name) == 0:
         return None
 
@@ -147,7 +155,6 @@ async def _get_kill_data(pilot_data, db):
     if not zkill_data:
         stats = _get_stats_dictionary(pilot_data, ret_blank=True)
         stats['process_time'] = time.time() - start_time
-        stats['query'] = True
         return stats
 
     zkill_data = zkill_data[:config.OPTIONS_OBJECT.Get("maxKillmails", default=50)]
@@ -173,10 +180,10 @@ async def _get_zkill_data(page, pilot_id, pilot_name):
     statusmsg.push_status('Requesting {}'.format(url))
     Logger.info('Requesting {}'.format(url))
     start_time = time.time()
+    data = None
     async with ClientSession() as session:
         retry = 0
-        data = None
-        while True:
+        while True and not config.OPTIONS_OBJECT.Get("stop"):
             if retry == config.ZKILL_RETRY:
                 break
             try:
@@ -246,7 +253,6 @@ def _get_stats_dictionary(pilot_data, ret_blank=False):
         stats['associates'] = None
         stats['buttbuddies'] = None
         stats['ordered_losses'] = None
-        stats['query'] = False
         stats['top_space'] = None
     return stats
 
@@ -329,7 +335,7 @@ async def _fetch(killmail_id, killhash, session):
     """
 
     url = "https://esi.evetech.net/v1/killmails/{}/{}/?datasource=tranquility".format(killmail_id, killhash)
-    while True:
+    while True and not config.OPTIONS_OBJECT.Get("stop"):
         async with session.get(url) as response:
             r = await response.read()
             try:
@@ -343,6 +349,7 @@ async def _fetch(killmail_id, killhash, session):
             with open(os.path.join(config.PREF_PATH, 'kills/{}.json'.format(killmail_id)), 'w') as file:
                 json.dump(j, file)
             return j
+    return None
 
 
 def _prepare_stats(pilot_data, killmails, db):
