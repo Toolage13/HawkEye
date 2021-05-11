@@ -3,11 +3,9 @@
 """
 Handles version control, static constants, resource paths, config file storage, color schema, and logging.
 """
-import logging
 import logging.config
 import optstore
 import os
-from pkg_resources import get_distribution, DistributionNotFound
 import platform
 import sys
 import wx  # required for colour codes in DARK_MODE
@@ -15,10 +13,7 @@ import wx  # required for colour codes in DARK_MODE
 
 Logger = logging.getLogger(__name__)
 
-try:
-    __version__ = get_distribution(__name__).version
-except DistributionNotFound:
-    __version__ = "Unknown Version"
+__version__ = 1.0
 
 # Various constants
 MAX_NAMES = 500  # The max number of char names to be processed
@@ -26,7 +21,7 @@ MAX_KM = 100  # Max number of killmails to process per character
 ZKILL_MULTIPLIER = 1.5
 ZKILL_RETRY = 50
 MAX_CHUNK = 50
-GUI_TITLE = "HawkEye " + __version__
+GUI_TITLE = "HawkEye v{}".format(__version__)
 CYNO_HL_PERCENTAGE = 0.01
 BLOPS_HL_PERCENTAGE = 0.01
 SB_HL_PERCENTAGE = 0.1

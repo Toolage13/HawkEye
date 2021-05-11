@@ -15,6 +15,7 @@ import time
 import wx
 import pyperclip
 import statusmsg
+import updatedialog
 
 Logger = logging.getLogger(__name__)
 
@@ -65,8 +66,16 @@ def analyze_chars(pilot_names):
     # wx.CallAfter(app.MyFrame.grid.ClearGrid)
     try:
         outlist, filtered = analyze.main(pilot_names, config.OPTIONS_OBJECT.Get("pop", True))
+        config.OPTIONS_OBJECT.Set("stop", False)
         duration = round(time.time() - start_time, 1)
         if outlist is not None:
+            orig = config.OPTIONS_OBJECT.Get("outlist", [])
+            orig.append(outlist)
+            config.OPTIONS_OBJECT.Set("outlist", orig)
+            index = config.OPTIONS_OBJECT.Get("index", 0)
+            if config.OPTIONS_OBJECT.Get("index", 0) < len(config.OPTIONS_OBJECT.Get("outlist")) - 1:
+                config.OPTIONS_OBJECT.Set("index", len(config.OPTIONS_OBJECT.Get("outlist")) - 1)
+
             # Need to use keyword args as sortOutlist can also get called
             # by event handler which would pass event object as first argument.
             wx.CallAfter(app.MyFrame.sortOutlist, outlist=outlist, duration=duration, filtered=filtered)
@@ -76,7 +85,11 @@ def analyze_chars(pilot_names):
         Logger.error("Failed to collect character information. Clipboard content was: {}".format(str(pilot_names)), exc_info=True)
 
 
+config.OPTIONS_OBJECT.Set("outlist", [])
+config.OPTIONS_OBJECT.Set("index", -1)
 app = gui.App(0)
+if updatedialog.CheckVersion():
+    app.MyFrame._ShowUpdate()
 background_thread = threading.Thread(target=watch_clpbd, daemon=True)
 background_thread.start()
 app.MainLoop()
