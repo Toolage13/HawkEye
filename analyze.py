@@ -38,6 +38,8 @@ def main(pilot_names, populate_all):
                     character['query'] = False
             return character_stats, len(pilot_names) - len(filtered_pilot_data)
 
+        if filtered_pilot_data is None:
+            return (None, None)
         if len(filtered_pilot_data) == 0:
             Logger.warning('Filtered out all pilots provided...')
             statusmsg.push_status("Filtered out all pilots provided...")
