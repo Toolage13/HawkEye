@@ -67,7 +67,7 @@ def main(pilot_names, populate_all):
                         break
 
         for char in character_stats:
-            if config.OPTIONS_OBJECT.Get("stop"):
+            if config.OPTIONS_OBJECT.Get("stop", False):
                 char['query'] = False
 
         return character_stats, len(pilot_names) - len(filtered_pilot_data)
@@ -183,7 +183,7 @@ async def _get_zkill_data(page, pilot_id, pilot_name):
     data = None
     async with ClientSession() as session:
         retry = 0
-        while True and not config.OPTIONS_OBJECT.Get("stop"):
+        while True and not config.OPTIONS_OBJECT.Get("stop", False):
             if retry == config.ZKILL_RETRY:
                 break
             try:
@@ -335,7 +335,7 @@ async def _fetch(killmail_id, killhash, session):
     """
 
     url = "https://esi.evetech.net/v1/killmails/{}/{}/?datasource=tranquility".format(killmail_id, killhash)
-    while True and not config.OPTIONS_OBJECT.Get("stop"):
+    while True and not config.OPTIONS_OBJECT.Get("stop", False):
         async with session.get(url) as response:
             r = await response.read()
             try:
