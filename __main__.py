@@ -74,7 +74,6 @@ def analyze_chars(pilot_names):
             index = config.OPTIONS_OBJECT.Get("index", 0)
             if config.OPTIONS_OBJECT.Get("index", 0) < len(config.OPTIONS_OBJECT.Get("outlist")) - 1:
                 config.OPTIONS_OBJECT.Set("index", len(config.OPTIONS_OBJECT.Get("outlist")) - 1)
-            print(config.OPTIONS_OBJECT.Get("index", 0))
 
             # Need to use keyword args as sortOutlist can also get called
             # by event handler which would pass event object as first argument.
