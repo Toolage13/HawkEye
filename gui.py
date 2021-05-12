@@ -382,7 +382,7 @@ class Frame(wx.Frame):
         self.options.Set("auto_collapse", self.auto_collapse.IsChecked())
 
     def _mouseMove(self, e):
-        if not self.options.Get("show_popup", False):
+        if not self.options.Get("show_popup", True):
             return
         # Static data
         x, y = self.grid.CalcUnscrolledPosition(e.GetPosition())
@@ -396,6 +396,7 @@ class Frame(wx.Frame):
             time.sleep(0.1)
             if (mx, my) != wx.GetMousePosition():
                 return
+            Logger.error("mousex: {} mousey {}".format(mx, my))
             self.tip = PilotFrame(self, -1,
                                   self.options.Get("outlist")[self.options.Get("index")][row]['pilot_name'],
                                   size=(360, 505),
