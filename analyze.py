@@ -577,6 +577,7 @@ def _get_associates(associates, db):
         for entity in affil_names:
             if entity_id == entity['id']:
                 associates[associates.index(entity_id)] = entity['name']
+                break
     return associates
 
 
