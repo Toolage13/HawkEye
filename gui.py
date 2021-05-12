@@ -216,7 +216,7 @@ class Frame(wx.Frame):
         self.grid.CreateGrid(0, 0)
         self.grid.SetName("Output List")
         self.grid.ShowScrollbars(wx.SHOW_SB_NEVER, wx.SHOW_SB_DEFAULT)
-        self.Bind(wx.EVT_MOTION, self._mouseMove)
+        self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self._mouseMove)
         self.tip = None
         self.prev_row = None
 
@@ -382,13 +382,17 @@ class Frame(wx.Frame):
         self.options.Set("auto_collapse", self.auto_collapse.IsChecked())
 
     def _mouseMove(self, e):
-        Logger.error(self.options.Get("popup_display", True))
+        # Logger.error(self.options.Get("popup_display", True))
         if not self.options.Get("popup_display", True):
             return
         # Static data
         x, y = self.grid.CalcUnscrolledPosition(e.GetPosition())
         row = self.grid.YToRow(y)
         mx, my = wx.GetMousePosition()
+
+        # Logger.error("x: {} y: {} row: {} mx: {} my: {} self.prev_row: {}".format(
+        #    x, y, row, mx, my, self.prev_row
+        #))
 
         if self.tip and (row == -1 or row != self.prev_row):
             self.tip.Destroy()
