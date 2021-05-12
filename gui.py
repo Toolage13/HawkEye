@@ -150,7 +150,7 @@ class Frame(wx.Frame):
 
         self.show_popup = self.opt_menu.AppendCheckItem(wx.ID_ANY, "&Show Popups\tCTRL+P")
         self.opt_menu.Bind(wx.EVT_MENU, self._togglePopup, self.show_popup)
-        self.show_popup.Check(self.options.Get("show_popup", True))
+        self.show_popup.Check(self.options.Get("popup_display", True))
 
         self.pop = self.opt_menu.AppendCheckItem(wx.ID_ANY, "&Populate All Fields\tCTRL+A")
         self.opt_menu.Bind(wx.EVT_MENU, self._setPopulate, self.pop)
@@ -216,7 +216,7 @@ class Frame(wx.Frame):
         self.grid.CreateGrid(0, 0)
         self.grid.SetName("Output List")
         self.grid.ShowScrollbars(wx.SHOW_SB_NEVER, wx.SHOW_SB_DEFAULT)
-        self.grid.GetGridWindow().Bind(wx.EVT_MOTION, self._mouseMove)
+        self.Bind(wx.EVT_MOTION, self._mouseMove)
         self.tip = None
         self.prev_row = None
 
@@ -299,7 +299,7 @@ class Frame(wx.Frame):
         self.menuopen = not(self.menuopen)
 
     def _togglePopup(self, e):
-        self.options.Set("show_popup", self.show_popup.IsChecked())
+        self.options.Set("popup_display", self.show_popup.IsChecked())
 
     def _on_timer(self):
         if self.tip is not None:
@@ -382,7 +382,8 @@ class Frame(wx.Frame):
         self.options.Set("auto_collapse", self.auto_collapse.IsChecked())
 
     def _mouseMove(self, e):
-        if not self.options.Get("show_popup", True):
+        Logger.error(self.options.Get("popup_display", True))
+        if not self.options.Get("popup_display", True):
             return
         # Static data
         x, y = self.grid.CalcUnscrolledPosition(e.GetPosition())
@@ -396,7 +397,6 @@ class Frame(wx.Frame):
             time.sleep(0.1)
             if (mx, my) != wx.GetMousePosition():
                 return
-            Logger.error("mousex: {} mousey {}".format(mx, my))
             self.tip = PilotFrame(self, -1,
                                   self.options.Get("outlist")[self.options.Get("index")][row]['pilot_name'],
                                   size=(360, 505),

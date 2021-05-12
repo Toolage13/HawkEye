@@ -72,7 +72,6 @@ def analyze_chars(pilot_names):
             orig = config.OPTIONS_OBJECT.Get("outlist", [])
             orig.append(outlist)
             config.OPTIONS_OBJECT.Set("outlist", orig)
-            index = config.OPTIONS_OBJECT.Get("index", 0)
             if config.OPTIONS_OBJECT.Get("index", 0) < len(config.OPTIONS_OBJECT.Get("outlist")) - 1:
                 config.OPTIONS_OBJECT.Set("index", len(config.OPTIONS_OBJECT.Get("outlist")) - 1)
 
