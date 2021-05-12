@@ -11,6 +11,7 @@ TODO
 # * Add in all the different loss columns
 # * Prevent menu from closing when clicking options
 # * Check if pilots on list were in previous run, don't re-run them unnecessarily
+# * Tag cyno ventures (indy cyno)
 """
 import aboutdialog
 import analyze
@@ -23,13 +24,12 @@ import shutil
 import sortarray
 import statusmsg
 import time
+import updatedialog
 import webbrowser
 import wx
 import wx.grid as WXG
 import wx.lib.agw.persist as pm
 import wx.richtext as rt
-import wx.lib.platebtn as pb
-import wx.lib.buttons as buttons
 
 Logger = logging.getLogger(__name__)
 
@@ -272,6 +272,9 @@ class Frame(wx.Frame):
         self.current_index = 0
         self.options.Set("outlist", [])
 
+    def _ShowUpdate(self):
+        updatedialog.showUpdateBox(self)
+
     def _StopClick(self, e):
         self.options.Set("stop", True)
 
@@ -356,7 +359,6 @@ class Frame(wx.Frame):
                     self.tempwindow.Destroy()
                     self.Show()
                     self.collapsed = False
-                    statusmsg.push_status("Restored window...")
             else:
                 if mx < xmin or mx > xmax or my < ymin or my > ymax:
                     time.sleep(0.2)
@@ -380,7 +382,7 @@ class Frame(wx.Frame):
         self.options.Set("auto_collapse", self.auto_collapse.IsChecked())
 
     def _mouseMove(self, e):
-        if not self.options.Get("show_popup", False):
+        if not self.options.Get("show_popup", True):
             return
         # Static data
         x, y = self.grid.CalcUnscrolledPosition(e.GetPosition())
@@ -394,6 +396,7 @@ class Frame(wx.Frame):
             time.sleep(0.1)
             if (mx, my) != wx.GetMousePosition():
                 return
+            Logger.error("mousex: {} mousey {}".format(mx, my))
             self.tip = PilotFrame(self, -1,
                                   self.options.Get("outlist")[self.options.Get("index")][row]['pilot_name'],
                                   size=(360, 505),
