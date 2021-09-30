@@ -142,9 +142,10 @@ class EveDB:
                                     zMin int,
                                     zMax int,
                                     factionID int,
-                                    radius int)
+                                    nebula int,
+                                    radius str)
                                     """)
-                self.__cursor.executemany("insert into mapRegions values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                self.__cursor.executemany("insert into mapRegions values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                           rows)
 
             with open(os.path.join(config.PREF_PATH, 'mapDenormalize.csv'), encoding='utf8') as file:
