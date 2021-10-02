@@ -251,9 +251,10 @@ class EveDB:
                                 alliance_name str,
                                 last_update timestamp)""")
         self.__local_c.execute("""create table if not exists entities(
-                                entity_id int,
+                                entity_id int primary key,
                                 entity_name str,
-                                last_update timestamp)""")
+                                last_update timestamp,
+                                unique (entity_id))""")
 
     def get_region(self, region_id):
         return self._map_regions[self._map_solar_systems[region_id]['regionID']]
@@ -400,7 +401,7 @@ class EveDB:
 
         for r in names:
             return_values.append({'id': r['id'], 'name': r['name']})
-            sql = "insert into entities (entity_id, entity_name, last_update) values (?, ?, ?)"
+            sql = "insert or replace into entities (entity_id, entity_name, last_update) values (?, ?, ?)"
             self.__local_c.execute(sql, (r['id'], r['name'], datetime.datetime.now()))
             self.__local_db.commit()
         return return_values
@@ -593,9 +594,10 @@ def clear_characters():
                                     alliance_name str,
                                     last_update timestamp)""")
     c.execute("""create table if not exists entities(
-                                    entity_id int,
+                                    entity_id int primary key,
                                     entity_name str,
-                                    last_update timestamp)""")
+                                    last_update timestamp,
+                                    unique(entity_id))""")
     db.commit()
     db.close()
 

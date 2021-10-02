@@ -573,11 +573,18 @@ def _get_associates(associates, db):
     if associates is None:
         return None
     affil_names = db.get_affil_names(associates)
+
+    assoc_ret = []
+
     for entity_id in associates:
         for entity in affil_names:
             if entity_id == entity['id']:
-                associates[associates.index(entity_id)] = entity.get('name')
-    return associates
+                assoc_ret.append(entity.get('name'))
+    unique_list = []
+    for x in assoc_ret:
+        if x not in unique_list:
+            unique_list.append(x)
+    return unique_list
 
 
 async def _get_loss_data(pilot_data, db):
