@@ -576,7 +576,7 @@ def _get_associates(associates, db):
     for entity_id in associates:
         for entity in affil_names:
             if entity_id == entity['id']:
-                associates[associates.index(entity_id)] = entity['name']
+                associates[associates.index(entity_id)] = entity.get('name')
     return associates
 
 
