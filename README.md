@@ -6,4 +6,4 @@ A program that makes EVE more fun.
 
 ## Linux
 
-`Contact Darkside nobody cares about Linux boys`
+`Contact Darkside`
